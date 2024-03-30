@@ -30,9 +30,9 @@ useraccount.add_account("admin", "") # create user without password
 ssh = Server(useraccount)
 
 @ssh.on_user("command")
-def command(channel, command: str, client):
+def command(client, command: str):
     if command == "hello":
-        Send(channel, "world!")
+        Send(client, "world!")
         
 ssh.run(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'private_key.pem'))
 ```
