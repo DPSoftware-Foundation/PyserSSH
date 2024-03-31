@@ -48,6 +48,7 @@ class Sinterface(paramiko.ServerInterface):
             return paramiko.AUTH_SUCCESSFUL
         else:
             if self.serverself._handle_event("auth", data):
+                self.current_user = username  # Store the current user upon successful authentication
                 return paramiko.AUTH_SUCCESSFUL
             else:
                 return paramiko.AUTH_FAILED
@@ -67,8 +68,11 @@ class Sinterface(paramiko.ServerInterface):
             "pixelwidth": pixelwidth,
             "pixelheight": pixelheight,
         }
-        self.serverself.client_handlers[channel.getpeername()]["windowsize"] = data2
-        self.serverself._handle_event("connectpty", channel, data, self.serverself.client_handlers[channel.getpeername()])
+        try:
+            self.serverself.client_handlers[channel.getpeername()]["windowsize"] = data2
+            self.serverself._handle_event("connectpty", self.serverself.client_handlers[channel.getpeername()], data)
+        except:
+            pass
 
         return True
 
@@ -76,6 +80,18 @@ class Sinterface(paramiko.ServerInterface):
         return True
 
     def check_channel_x11_request(self, channel, single_connection, auth_protocol, auth_cookie, screen_number):
+        data = {
+            "single_connection": single_connection,
+            "auth_protocol": auth_protocol,
+            "auth_cookie": auth_cookie,
+            "screen_number": screen_number
+        }
+        try:
+            self.serverself.client_handlers[channel.getpeername()]["x11"] = data
+            self.serverself._handle_event("connectx11", self.serverself.client_handlers[channel.getpeername()], data)
+        except:
+            pass
+
         return True
 
     def check_channel_window_change_request(self, channel, width: int, height: int, pixelwidth: int, pixelheight: int):
@@ -86,4 +102,4 @@ class Sinterface(paramiko.ServerInterface):
             "pixelheight": pixelheight
         }
         self.serverself.client_handlers[channel.getpeername()]["windowsize"] = data
-        self.serverself._handle_event("resized", channel, data, self.serverself.client_handlers[channel.getpeername()])
+        self.serverself._handle_event("resized", self.serverself.client_handlers[channel.getpeername()], data)

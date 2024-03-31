@@ -24,31 +24,42 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import re
+import socket
 
 from .system.sysfunc import replace_enter_with_crlf
 
-def Send(channel, string, ln=True):
-    if ln:
-        channel.send(replace_enter_with_crlf(string + "\n"))
-    else:
-        channel.send(replace_enter_with_crlf(string))
-
-def Print(channel, string, start="", end="\n"):
-    channel.send(replace_enter_with_crlf(start + string + end))
-
-def Clear(client):
+def Send(client, string, ln=True):
     channel = client["channel"]
+    if ln:
+        channel.send(replace_enter_with_crlf(str(string) + "\n"))
+    else:
+        channel.send(replace_enter_with_crlf(str(string)))
+
+def Clear(client, oldclear=False):
     sx, sy = client["windowsize"]["width"], client["windowsize"]["height"]
 
-    for x in range(sx):
-        for y in range(sy):
-            Send(channel, '\b \b', ln=False)  # Send newline after each line
+    if oldclear:
+        for x in range(sy):
+            Send(client, '\b \b' * sx, ln=False)  # Send newline after each line
+    else:
+        Send(client, "\033[3J", ln=False)
+        Send(client, "\033[1J", ln=False)
+        Send(client, "\033[H", ln=False)
 
-def wait_input(channel, prompt="", defaultvalue=None, cursor_scroll=False, echo=True, password=False, passwordmask=b"*", noabort=False):
+def Title(client, title):
+    Send(client, f"\033]0;{title}\007", ln=False)
+
+def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=True, password=False, passwordmask=b"*", noabort=False, timeout=0):
+    channel = client["channel"]
+
     channel.send(replace_enter_with_crlf(prompt))
 
     buffer = bytearray()
     cursor_position = 0
+
+    if timeout != 0:
+        channel.settimeout(timeout)
 
     try:
         while True:
@@ -90,10 +101,17 @@ def wait_input(channel, prompt="", defaultvalue=None, cursor_scroll=False, echo=
 
         channel.sendall(b'\r\n')
 
+    except socket.timeout:
+        output = ""
     except Exception:
         raise
+    else:
+        output = buffer.decode('utf-8')
 
-    output = buffer.decode('utf-8')
+    if timeout != 0:
+        channel.settimeout(0)
+        channel.setblocking(False)
+        channel.sendall(b'\r\n')
 
     # Return default value if specified and no input given
     if defaultvalue is not None and not output.strip():
@@ -101,24 +119,86 @@ def wait_input(channel, prompt="", defaultvalue=None, cursor_scroll=False, echo=
     else:
         return output
 
-def wait_inputkey(channel, prompt="", raw=False):
+def wait_inputkey(client, prompt="", raw=False, timeout=0):
+    channel = client["channel"]
+
     if prompt != "":
         channel.send(replace_enter_with_crlf(prompt))
+
+    if timeout != 0:
+        channel.settimeout(timeout)
 
     try:
         byte = channel.recv(10)
 
-        if not raw:
-            if not byte or byte == b'\x04':
-                raise EOFError()
+        if not byte or byte == b'\x04':
+            raise EOFError()
 
-            elif byte == b'\t':
+        if not raw:
+            if bool(re.compile(b'\x1b\[[0-9;]*[mGK]').search(byte)):
                 pass
 
-            return byte.decode('utf-8')
+            return byte.decode('utf-8') # only regular character
 
         else:
             return byte
 
+    except socket.timeout:
+        channel.settimeout(0)
+        channel.setblocking(False)
+        channel.send("\r\n")
+        return None
     except Exception:
+        if timeout != 0:
+            channel.settimeout(0)
+            channel.setblocking(False)
         raise
+
+def wait_choose(client, choose, prompt="", timeout=0):
+    channel = client["channel"]
+
+    chooseindex = 0
+    chooselen = len(choose) - 1
+
+    if timeout != 0:
+        channel.settimeout(timeout)
+
+    while True:
+        try:
+            tempchooselist = choose.copy()
+
+            tempchooselist[chooseindex] = "[" + tempchooselist[chooseindex] + "]"
+
+            exported = " ".join(tempchooselist)
+
+            if prompt.strip() == "":
+                Send(channel, f'\r{exported}', ln=False)
+            else:
+                Send(channel, f'\r{prompt}{exported}', ln=False)
+
+            keyinput = wait_inputkey(channel, raw=True)
+
+            if keyinput == b'\r':  # Enter key
+                Send(channel, "\033[K")
+                return chooseindex
+            elif keyinput == b'\x03':  # ' ctrl+c' key for cancel
+                Send(channel, "\033[K")
+                return None
+            elif keyinput == b'\x1b[D':  # Up arrow key
+                chooseindex -= 1
+                if chooseindex < 0:
+                    chooseindex = 0
+            elif keyinput == b'\x1b[C':  # Down arrow key
+                chooseindex += 1
+                if chooseindex > chooselen:
+                    chooseindex = chooselen
+        except socket.timeout:
+            channel.settimeout(0)
+            channel.setblocking(False)
+            channel.send("\r\n")
+            return chooseindex
+        except Exception:
+            if timeout != 0:
+                channel.settimeout(0)
+                channel.setblocking(False)
+            raise

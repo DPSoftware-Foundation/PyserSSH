@@ -111,6 +111,15 @@ class AccountManager:
             return self.accounts[username]["sftp_path"]
         return ""
 
+    def get_user_timeout(self, username):
+        if username in self.accounts and "timeout" in self.accounts[username]:
+            return self.accounts[username]["timeout"]
+        return 0
+
+    def set_user_timeout(self, username, timeout=0):
+        if username in self.accounts:
+            self.accounts[username]["timeout"] = timeout
+
     def add_history(self, username, command):
         if not self.anyuser:
             if username in self.accounts:

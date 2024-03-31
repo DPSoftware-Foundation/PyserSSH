@@ -28,7 +28,6 @@ SOFTWARE.
 import os
 import time
 import paramiko
-import socket
 import threading
 from functools import wraps
 import logging
@@ -37,25 +36,16 @@ from .system.SFTP import SSHSFTPServer
 from .system.interface import Sinterface
 from .interactive import *
 from .system.inputsystem import expect
-from .system.info import system_banner
-
-try:
-    os.environ["pyserssh_systemmessage"]
-except:
-    os.environ["pyserssh_systemmessage"] = "YES"
-
-if os.environ["pyserssh_systemmessage"] == "YES":
-    print(system_banner)
+from .system.info import system_banner, __version__
 
 #paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
 
 sftpclient = ["WinSCP", "Xplore"]
 
 logger = logging.getLogger("PyserSSH")
-logger.disabled = True
 
 class Server:
-    def __init__(self, accounts, system_message=True, timeout=0, disable_scroll_with_arrow=True, sftp=True, sftproot=os.getcwd(), system_commands=False, compression=True, usexternalauth=False, history=True):
+    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=True, sftproot=os.getcwd(), system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{__version__}", inspeed=32768):
         """
          A simple SSH server
         """
@@ -64,7 +54,6 @@ class Server:
         self.client_handlers = {}  # Dictionary to store event handlers for each client
         self.current_users = {}  # Dictionary to store current_user for each connected client
         self.accounts = accounts
-        self.timeout = timeout
         self.disable_scroll_with_arrow = disable_scroll_with_arrow
         self.sftproot = sftproot
         self.sftpena = sftp
@@ -72,6 +61,10 @@ class Server:
         self.compressena = compression
         self.usexternalauth = usexternalauth
         self.history = history
+        self.enainputsystem = inputsystem
+        self.XHandler = XHandler
+        self.title = title
+        self.inspeed = inspeed
 
         self.system_banner = system_banner
 
@@ -111,6 +104,7 @@ class Server:
             SSHSFTPServer.CLIENTHANDELES = self.client_handlers
             bh_session.set_subsystem_handler('sftp', paramiko.SFTPServer, SSHSFTPServer)
 
+
         if self.compressena:
             bh_session.use_compression(True)
         else:
@@ -120,6 +114,8 @@ class Server:
         bh_session.packetizer.REKEY_BYTES = pow(2, 40)
         bh_session.packetizer.REKEY_PACKETS = pow(2, 40)
 
+        bh_session.default_max_packet_size = self.inspeed
+
         server = Sinterface(self)
         bh_session.start_server(server=server)
 
@@ -127,74 +123,78 @@ class Server:
 
         channel = bh_session.accept()
 
-        if self.timeout != 0:
-            channel.settimeout(self.timeout)
-
         if channel is None:
             logger.warning("no channel")
 
         try:
             logger.info("user authenticated")
-            client_address = channel.getpeername()  # Get client's address to identify the user
-            if client_address not in self.client_handlers:
+            peername = channel.getpeername()
+            if peername not in self.client_handlers:
                 # Create a new event handler for this client if it doesn't exist
-                self.client_handlers[client_address] = {
+                self.client_handlers[peername] = {
                     "event_handlers": {},
                     "current_user": None,
                     "channel": channel,  # Associate the channel with the client handler,
                     "last_activity_time": None,
                     "connecttype": None,
                     "last_login_time": None,
-                    "windowsize": {}
+                    "windowsize": {},
+                    "x11": {}
                 }
-            client_handler = self.client_handlers[client_address]
+            client_handler = self.client_handlers[peername]
             client_handler["current_user"] = server.current_user
             client_handler["channel"] = channel  # Update the channel attribute for the client handler
             client_handler["last_activity_time"] = time.time()
             client_handler["last_login_time"] = time.time()
 
-            peername = channel.getpeername()
-
-
-            #byte = channel.recv(1)
-            #if byte == b'\x00':
-
             #if not any(bh_session.remote_version.split("-")[2].startswith(prefix) for prefix in sftpclient):
             if not channel.out_window_size == bh_session.default_window_size:
+                while self.client_handlers[channel.getpeername()]["windowsize"] == {}:
+                    pass
+
+                channel.send(f"\033]0;{self.title}\007".encode())
+
                 if self.sysmess:
                     channel.sendall(replace_enter_with_crlf(self.system_banner))
                     channel.sendall(replace_enter_with_crlf("\n"))
 
-                while self.client_handlers[channel.getpeername()]["windowsize"] == {}:
-                    pass
-
-                self._handle_event("connect", channel, self.client_handlers[channel.getpeername()])
+                try:
+                    self._handle_event("connect", self.client_handlers[channel.getpeername()])
+                except Exception as e:
+                    self._handle_event("error", self.client_handlers[channel.getpeername()], e)
 
                 client_handler["connecttype"] = "ssh"
-                try:
-                    channel.send(replace_enter_with_crlf(self.accounts.get_prompt(self.client_handlers[channel.getpeername()]["current_user"]) + " ").encode('utf-8'))
-                    while True:
-                        expect(self, channel, peername)
-                except KeyboardInterrupt:
-                    channel.close()
-                    bh_session.close()
-                except Exception as e:
-                    logger.error(e)
-                finally:
-                    channel.close()
+                if self.enainputsystem:
+                    try:
+                        if self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]) != 0:
+                            channel.settimeout(self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]))
+
+                        channel.send(replace_enter_with_crlf(self.accounts.get_prompt(self.client_handlers[channel.getpeername()]["current_user"]) + " ").encode('utf-8'))
+                        while True:
+                            expect(self, channel, peername)
+                    except KeyboardInterrupt:
+                        self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
+                        channel.close()
+                        bh_session.close()
+                    except Exception as e:
+                        self._handle_event("syserror", client_handler, e)
+                        logger.error(e)
+                    finally:
+                        self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
+                        channel.close()
             else:
                 if self.sftpena:
                     if self.accounts.get_user_sftp_allow(self.client_handlers[channel.getpeername()]["current_user"]):
                         client_handler["connecttype"] = "sftp"
-                        self._handle_event("connectsftp", channel, self.client_handlers[channel.getpeername()])
+                        self._handle_event("connectsftp", self.client_handlers[channel.getpeername()])
                     else:
-                        del self.client_handlers[peername]
+                        self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
                         channel.close()
                 else:
-                    del self.client_handlers[peername]
+                    self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
                     channel.close()
         except:
-            raise
+            pass
 
     def stop_server(self):
         logger.info("Stopping the server...")
@@ -233,37 +233,37 @@ class Server:
         for peername, client_handler in list(self.client_handlers.items()):
             if client_handler["current_user"] == username:
                 channel = client_handler.get("channel")
+                self._handle_event("disconnected", channel.getpeername(), self.client_handlers[channel.getpeername()]["current_user"])
                 if reason is None:
                     if channel:
                         channel.close()
-                    del self.client_handlers[peername]
                     logger.info(f"User '{username}' has been kicked.")
                 else:
                     if channel:
                         Send(channel, f"You have been disconnected for {reason}")
                         channel.close()
-                    del self.client_handlers[peername]
                     logger.info(f"User '{username}' has been kicked by reason {reason}.")
 
     def kickbypeername(self, peername, reason=None):
         client_handler = self.client_handlers.get(peername)
         if client_handler:
             channel = client_handler.get("channel")
+            self._handle_event("disconnected", channel.getpeername(), self.client_handlers[channel.getpeername()]["current_user"])
             if reason is None:
                 if channel:
                     channel.close()
-                del self.client_handlers[peername]
                 logger.info(f"peername '{peername}' has been kicked.")
             else:
                 if channel:
                     Send(channel, f"You have been disconnected for {reason}")
                     channel.close()
-                del self.client_handlers[peername]
                 logger.info(f"peername '{peername}' has been kicked by reason {reason}.")
 
     def kickall(self, reason=None):
         for peername, client_handler in self.client_handlers.items():
             channel = client_handler.get("channel")
+            self._handle_event("disconnected", channel.getpeername(), self.client_handlers[channel.getpeername()]["current_user"])
+
             if reason is None:
                 if channel:
                     channel.close()
@@ -292,6 +292,7 @@ class Server:
         for client_handler in self.client_handlers.values():
             if client_handler.get("current_user") == username:
                 channel = client_handler.get("channel")
+
                 if channel:
                     try:
                         # Send the message to the specific client

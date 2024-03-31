@@ -29,3 +29,21 @@ def replace_enter_with_crlf(input_string):
     if '\n' in input_string:
         input_string = input_string.replace('\n', '\r\n')
     return input_string
+
+
+def text_centered_screen(text, screen_width, screen_height, spacecharacter=" "):
+    screen = []
+    lines = text.split("\n")
+    padding_vertical = (screen_height - len(lines)) // 2  # Calculate vertical padding
+
+    for y in range(screen_height):
+        line = ""
+        if padding_vertical <= y < padding_vertical + len(lines):  # Check if it's within the range of the text lines
+            index = y - padding_vertical  # Get the corresponding line index
+            padding_horizontal = (screen_width - len(lines[index])) // 2  # Calculate horizontal padding for each line
+            line += spacecharacter * padding_horizontal + lines[index] + spacecharacter * padding_horizontal
+        else:  # Fill other lines with space characters
+            line += spacecharacter * screen_width
+        screen.append(line)
+
+    return "\n".join(screen)

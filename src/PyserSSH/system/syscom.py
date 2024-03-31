@@ -17,48 +17,33 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WA3RRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import shlex
 
 from ..interactive import *
-from .info import version
-
-try:
-    from damp11113.info import pyofetch
-    from damp11113.utils import TextFormatter
-    damp11113lib = True
-except:
-    damp11113lib = False
 
 def systemcommand(client, command):
     channel = client["channel"]
 
-    if command == "info":
-        if damp11113lib:
-            Send(channel, "Please wait...", ln=False)
-            pyf = pyofetch().info(f"{TextFormatter.format_text('PyserSSH Version', color='yellow')}: {TextFormatter.format_text(version, color='cyan')}")
-            Send(channel, "              \r", ln=False)
-            for i in pyf:
-                Send(channel, i)
-        else:
-            Send(channel, "damp11113-library not available for use this command")
-    elif command == "whoami":
+    if command == "whoami":
         Send(channel, client["current_user"])
+        return True
+    elif command.startswith("title"):
+        args = shlex.split(command)
+        title = args[1]
+        Title(client, title)
+        return True
     elif command == "exit":
         channel.close()
+        return True
     elif command == "clear":
         Clear(client)
-    elif command == "fullscreentest":
-        Clear(client)
-        sx, sy = client["windowsize"]["width"], client["windowsize"]["height"]
-
-        for x in range(sx):
-            for y in range(sy):
-                Send(channel, 'H', ln=False)  # Send newline after each line
+        return True
     else:
         return False

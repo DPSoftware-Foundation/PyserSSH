@@ -25,44 +25,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-"""
-note
-
-ansi cursor arrow
-up - \x1b[A
-down - \x1b[B
-left - \x1b[D
-right - \x1b[C
-
-https://en.wikipedia.org/wiki/ANSI_escape_code
-"""
-import os
-import logging
-
-from .interactive import *
-from .server import Server
-from .account import AccountManager
-from .system.info import system_banner
-
-
-try:
-    os.environ["pyserssh_systemmessage"]
-except:
-    os.environ["pyserssh_systemmessage"] = "YES"
-
-try:
-    os.environ["pyserssh_enable_damp11113"]
-except:
-    os.environ["pyserssh_enable_damp11113"] = "YES"
-
-try:
-    os.environ["pyserssh_log"]
-except:
-    os.environ["pyserssh_log"] = "NO"
-
-if os.environ["pyserssh_log"]:
-    logger = logging.getLogger("PyserSSH")
-    logger.disabled = True
-
-if os.environ["pyserssh_systemmessage"] == "YES":
-    print(system_banner)
+class PTOP:
+    def __init__(self, client, interval=1):
+        pass # working

@@ -25,10 +25,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-version = "4.0"
+__version__ = "4.2"
 
 system_banner = (
-    f"\033[36mPyserSSH V{version} \033[0m\n"
+    f"\033[36mPyserSSH V{__version__} \033[0m\n"
     #"\033[33m!!Warning!! This is Testing Version of PyserSSH \033[0m\n"
     "\033[35mUse Putty and WinSCP (SFTP) for best experience \033[0m"
 )

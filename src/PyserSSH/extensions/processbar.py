@@ -26,13 +26,16 @@ SOFTWARE.
 """
 # this file is from damp11113-library
 
-from itertools import cycle, islice
+from itertools import cycle
 import math
 import time
 from threading import Thread
 from time import sleep
 
-from ..interactive import Print
+from ..system.sysfunc import replace_enter_with_crlf
+
+def Print(channel, string, start="", end="\n"):
+    channel.send(replace_enter_with_crlf(start + string + end))
 
 try:
     from damp11113.utils import get_size_unit2, center_string, TextFormatter, insert_string
@@ -47,9 +50,8 @@ steps5 = ['[   ]', '[  -]', '[ --]', '[---]', '[-- ]', '[-  ]']
 steps6 = ['[   ]', '[  -]', '[ - ]', '[-  ]']
 
 class indeterminateStatus:
-    def __init__(self, client, desc="Loading...", end="[ ✔ ]", timeout=0.1, fail='[ ❌ ]', steps=None):
-        self.channel = client['channel']
-        self.windowsize = client["windowsize"]
+    def __init__(self, client, desc="Loading...", end="[  OK  ]", timeout=0.1, fail='[FAILED]', steps=None):
+        self.client = client
 
         self.desc = desc
         self.end = end
@@ -72,7 +74,7 @@ class indeterminateStatus:
         for c in cycle(self.steps):
             if self.done:
                 break
-            Print(self.channel, f"\r{c} {self.desc}" , end="")
+            Print(self.client['channel'], f"\r{c} {self.desc}" , end="")
             sleep(self.timeout)
 
     def __enter__(self):
@@ -80,23 +82,23 @@ class indeterminateStatus:
 
     def stop(self):
         self.done = True
-        cols = self.windowsize["width"]
-        Print(self.channel, "\r" + " " * cols, end="")
-        Print(self.channel, f"\r{self.end}")
+        cols = self.client["windowsize"]["width"]
+        Print(self.client['channel'], "\r" + " " * cols, end="")
+        Print(self.client['channel'], f"\r{self.end}")
 
     def stopfail(self):
         self.done = True
         self.fail = True
-        cols = self.windowsize["width"]
-        Print(self.channel, "\r" + " " * cols, end="")
-        Print(self.channel, f"\r{self.faill}")
+        cols = self.client["windowsize"]["width"]
+        Print(self.client['channel'], "\r" + " " * cols, end="")
+        Print(self.client['channel'], f"\r{self.faill}")
 
     def __exit__(self, exc_type, exc_value, tb):
         # handle exceptions with those variables ^
         self.stop()
 
 class LoadingProgress:
-    def __init__(self, client, total=100, totalbuffer=None, length=50, fill='█', fillbufferbar='█', desc="Loading...", status="", enabuinstatus=True, end="[ ✔ ]", timeout=0.1, fail='[ ❌ ]', steps=None, unit="it", barbackground="-", shortnum=False, buffer=False, shortunitsize=1000, currentshortnum=False, show=True, indeterminate=False, barcolor="red", bufferbarcolor="white",barbackgroundcolor="black", color=True):
+    def __init__(self, client, total=100, totalbuffer=None, length=50, fill='█', fillbufferbar='█', desc="Loading...", status="", enabuinstatus=True, end="[  OK  ]", timeout=0.1, fail='[FAILED]', steps=None, unit="it", barbackground="-", shortnum=False, buffer=False, shortunitsize=1000, currentshortnum=False, show=True, indeterminate=False, barcolor="red", bufferbarcolor="white",barbackgroundcolor="black", color=True):
         """
         Simple loading progress bar python
         @param client: from ssh client request
@@ -116,8 +118,7 @@ class LoadingProgress:
         @param barbackgroundcolor: change background color
         @param color: enable colorful
         """
-        self.channel = client["channel"]
-        self.windowsize = client["windowsize"]
+        self.client = client
 
         self.desc = desc
         self.end = end
@@ -278,7 +279,7 @@ class LoadingProgress:
                 self.currentprint = f"{c} {self.desc} | --%|{bar}| {elapsed_formatted} | {self.status}"
 
             if self.printed:
-                Print(self.channel, f"\r{self.currentprint}", end="")
+                Print(self.client["channel"], f"\r{self.currentprint}", end="")
 
             sleep(self.timeout)
 
@@ -287,16 +288,16 @@ class LoadingProgress:
 
     def stop(self):
         self.done = True
-        cols = self.windowsize["width"]
-        Print(self.channel, "\r" + " " * cols, end="")
-        Print(self.channel, f"\r{self.end}")
+        cols = self.client["windowsize"]["width"]
+        Print(self.client["channel"], "\r" + " " * cols, end="")
+        Print(self.client["channel"], f"\r{self.end}")
 
     def stopfail(self):
         self.done = True
         self.fail = True
-        cols = self.windowsize["width"]
-        Print(self.channel, "\r" + " " * cols, end="")
-        Print(self.channel, f"\r{self.faill}")
+        cols = self.client["windowsize"]["width"]
+        Print(self.client["channel"], "\r" + " " * cols, end="")
+        Print(self.client["channel"], f"\r{self.faill}")
 
     def __exit__(self, exc_type, exc_value, tb):
         # handle exceptions with those variables ^
