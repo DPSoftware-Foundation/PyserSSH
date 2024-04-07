@@ -1,5 +1,5 @@
 """
-PyserSSH - A SSH server. For more info visit https://github.com/damp11113/PyserSSH
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
 Copyright (C) 2023-2024 damp11113 (MIT)
 
 Visit https://github.com/damp11113/PyserSSH
@@ -26,15 +26,44 @@ SOFTWARE.
 """
 
 import pickle
+import time
+import atexit
+import threading
 
 class AccountManager:
-    def __init__(self, anyuser=False, historylimit=10):
+    def __init__(self, anyuser=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autoloadfile="autosave_session.ses"):
         self.accounts = {}
         self.anyuser = anyuser
         self.historylimit = historylimit
+        self.autosavedelay = autosavedelay
+
+        self.__autosavework = False
+        self.__autosaveworknexttime = 0
 
         if self.anyuser:
             print("history system can't work if 'anyuser' is enable")
+
+        if autoload:
+            self.load(autoloadfile)
+
+        if autosave:
+            self.__autosavethread = threading.Thread(target=self.__autosave)
+            self.__autosavethread.start()
+            atexit.register(self.__saveexit)
+
+    def __autosave(self):
+        self.save("autosave_session.ses")
+        self.__autosaveworknexttime = time.time() + self.autosavedelay
+        self.__autosavework = True
+        while self.__autosavework:
+            if int(self.__autosaveworknexttime) == int(time.time()):
+                self.save("autosave_session.ses")
+                self.__autosaveworknexttime = time.time() + self.autosavedelay
+
+    def __saveexit(self):
+        self.__autosavework = False
+        self.save("autosave_session.ses")
+        self.__autosavethread.join()
 
     def validate_credentials(self, username, password):
         if username in self.accounts and self.accounts[username]["password"] == password or self.anyuser:
@@ -66,11 +95,11 @@ class AccountManager:
         if username in self.accounts:
             self.accounts[username]["permissions"] = new_permissions
 
-    def save_to_file(self, filename):
+    def save(self, filename="session.ssh"):
         with open(filename, 'wb') as file:
             pickle.dump(self.accounts, file)
 
-    def load_from_file(self, filename):
+    def load(self, filename):
         try:
             with open(filename, 'rb') as file:
                 self.accounts = pickle.load(file)
@@ -114,11 +143,23 @@ class AccountManager:
     def get_user_timeout(self, username):
         if username in self.accounts and "timeout" in self.accounts[username]:
             return self.accounts[username]["timeout"]
-        return 0
+        return None
 
-    def set_user_timeout(self, username, timeout=0):
+    def set_user_timeout(self, username, timeout=None):
         if username in self.accounts:
             self.accounts[username]["timeout"] = timeout
+
+    def get_user_last_login(self, username):
+        if username in self.accounts and "lastlogin" in self.accounts[username]:
+            return self.accounts[username]["lastlogin"]
+        return None
+
+    def set_user_last_login(self, username, ip, timelogin=time.time()):
+        if username in self.accounts:
+            self.accounts[username]["lastlogin"] = {
+                "ip": ip,
+                "time": timelogin
+            }
 
     def add_history(self, username, command):
         if not self.anyuser:

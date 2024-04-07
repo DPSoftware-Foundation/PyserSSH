@@ -15,8 +15,6 @@ Install from github
 ```bash
 pip install git+https://github.com/damp11113/PyserSSH.git
 ```
-## Optional Packages
- - [damp11113-library](https://github.com/damp11113/damp11113-library)
 
 # Quick Example
 ```py

@@ -1,5 +1,5 @@
 """
-PyserSSH - A SSH server. For more info visit https://github.com/damp11113/PyserSSH
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
 Copyright (C) 2023-2024 damp11113 (MIT)
 
 Visit https://github.com/damp11113/PyserSSH
@@ -43,7 +43,14 @@ def expect(self, chan, peername, echo=True):
     currentuser = self.client_handlers[chan.getpeername()]
     try:
         while True:
-            byte = chan.recv(1)
+            try:
+                byte = chan.recv(1)
+            except socket.timeout:
+                chan.setblocking(False)
+                chan.settimeout(None)
+                chan.close()
+                raise EOFError()
+
             self._handle_event("onrawtype", self.client_handlers[chan.getpeername()], byte)
 
             self.client_handlers[chan.getpeername()]["last_activity_time"] = time.time()
@@ -151,9 +158,9 @@ def expect(self, chan, peername, echo=True):
             self.accounts.add_history(currentuser["current_user"], command)
 
         if command.strip() != "":
-            if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != 0:
-                chan.settimeout(0)
+            if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != None:
                 chan.setblocking(False)
+                chan.settimeout(None)
 
             try:
                 if self.enasyscom:
@@ -179,13 +186,13 @@ def expect(self, chan, peername, echo=True):
         except:
             logger.error("Send error")
 
-        if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != 0:
+        chan.setblocking(False)
+        chan.settimeout(None)
+
+        if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != None:
+            chan.setblocking(False)
             chan.settimeout(self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]))
 
-    except socket.timeout:
-        chan.settimeout(0)
-        chan.setblocking(False)
-        chan.close()
     except Exception as e:
         logger.error(str(e))
     finally:

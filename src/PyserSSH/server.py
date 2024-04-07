@@ -1,5 +1,5 @@
 """
-PyserSSH - A SSH server. For more info visit https://github.com/damp11113/PyserSSH
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
 Copyright (C) 2023-2024 damp11113 (MIT)
 
 Visit https://github.com/damp11113/PyserSSH
@@ -147,6 +147,8 @@ class Server:
             client_handler["last_activity_time"] = time.time()
             client_handler["last_login_time"] = time.time()
 
+            self.accounts.set_user_last_login(self.client_handlers[channel.getpeername()]["current_user"], peername[0])
+
             #if not any(bh_session.remote_version.split("-")[2].startswith(prefix) for prefix in sftpclient):
             if not channel.out_window_size == bh_session.default_window_size:
                 while self.client_handlers[channel.getpeername()]["windowsize"] == {}:
@@ -166,7 +168,8 @@ class Server:
                 client_handler["connecttype"] = "ssh"
                 if self.enainputsystem:
                     try:
-                        if self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]) != 0:
+                        if self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]) != None:
+                            channel.setblocking(False)
                             channel.settimeout(self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]))
 
                         channel.send(replace_enter_with_crlf(self.accounts.get_prompt(self.client_handlers[channel.getpeername()]["current_user"]) + " ").encode('utf-8'))

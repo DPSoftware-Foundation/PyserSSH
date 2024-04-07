@@ -1,5 +1,5 @@
 """
-PyserSSH - A SSH server. For more info visit https://github.com/damp11113/PyserSSH
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
 Copyright (C) 2023-2024 damp11113 (MIT)
 
 Visit https://github.com/damp11113/PyserSSH
@@ -60,7 +60,7 @@ try:
 except:
     os.environ["pyserssh_log"] = "NO"
 
-if os.environ["pyserssh_log"]:
+if os.environ["pyserssh_log"] == "NO":
     logger = logging.getLogger("PyserSSH")
     logger.disabled = True
 

@@ -1,5 +1,5 @@
 """
-PyserSSH - A SSH server. For more info visit https://github.com/damp11113/PyserSSH
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
 Copyright (C) 2023-2024 damp11113 (MIT)
 
 Visit https://github.com/damp11113/PyserSSH
@@ -102,16 +102,17 @@ def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=T
         channel.sendall(b'\r\n')
 
     except socket.timeout:
+        channel.setblocking(False)
+        channel.settimeout(None)
+        channel.sendall(b'\r\n')
         output = ""
     except Exception:
+        channel.setblocking(False)
+        channel.settimeout(None)
+        channel.sendall(b'\r\n')
         raise
     else:
         output = buffer.decode('utf-8')
-
-    if timeout != 0:
-        channel.settimeout(0)
-        channel.setblocking(False)
-        channel.sendall(b'\r\n')
 
     # Return default value if specified and no input given
     if defaultvalue is not None and not output.strip():
@@ -144,14 +145,14 @@ def wait_inputkey(client, prompt="", raw=False, timeout=0):
             return byte
 
     except socket.timeout:
-        channel.settimeout(0)
         channel.setblocking(False)
+        channel.settimeout(None)
         channel.send("\r\n")
         return None
     except Exception:
-        if timeout != 0:
-            channel.settimeout(0)
-            channel.setblocking(False)
+        channel.setblocking(False)
+        channel.settimeout(None)
+        channel.send("\r\n")
         raise
 
 def wait_choose(client, choose, prompt="", timeout=0):
@@ -193,12 +194,12 @@ def wait_choose(client, choose, prompt="", timeout=0):
                 if chooseindex > chooselen:
                     chooseindex = chooselen
         except socket.timeout:
-            channel.settimeout(0)
             channel.setblocking(False)
+            channel.settimeout(None)
             channel.send("\r\n")
             return chooseindex
         except Exception:
-            if timeout != 0:
-                channel.settimeout(0)
-                channel.setblocking(False)
+            channel.setblocking(False)
+            channel.settimeout(None)
+            channel.send("\r\n")
             raise
