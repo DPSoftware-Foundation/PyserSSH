@@ -36,12 +36,15 @@ def Send(client, string, ln=True):
     else:
         channel.send(replace_enter_with_crlf(str(string)))
 
-def Clear(client, oldclear=False):
+def Clear(client, oldclear=False, keep=False):
     sx, sy = client["windowsize"]["width"], client["windowsize"]["height"]
 
     if oldclear:
         for x in range(sy):
             Send(client, '\b \b' * sx, ln=False)  # Send newline after each line
+    elif keep:
+        Send(client, "\033[2J", ln=False)
+        Send(client, "\033[H", ln=False)
     else:
         Send(client, "\033[3J", ln=False)
         Send(client, "\033[1J", ln=False)

@@ -5,7 +5,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name='PyserSSH',
-    version='4.3',
+    version='4.4',
     license='MIT',
     author='damp11113',
     author_email='damp51252@gmail.com',

@@ -2,68 +2,72 @@ import os
 import socket
 import time
 import shlex
-from damp11113 import TextFormatter, sort_files, allfiles
 import cv2
 import traceback
 import requests
 from bs4 import BeautifulSoup
+import pyfiglet
 
-from PyserSSH import Server, AccountManager, Send, wait_input, wait_inputkey, wait_choose, Clear, Title
-from PyserSSH.system.info import system_banner
-from PyserSSH.extensions.processbar import indeterminateStatus, LoadingProgress
-from PyserSSH.extensions.dialog import MenuDialog, TextDialog, TextInputDialog
-from PyserSSH.extensions.moredisplay import clickable_url
+from ..server import Server
+from ..account import AccountManager
+from ..interactive import Send, Clear, wait_input, wait_inputkey, wait_choose
+from ..system.info import system_banner, __version__
+from ..extensions.processbar import (indeterminateStatus, LoadingProgress)
+from ..extensions.dialog import MenuDialog, TextDialog, TextInputDialog
+from ..extensions.moredisplay import clickable_url
+
+try:
+    from damp11113 import TextFormatter
+except:
+    print("No 'damp11113-library'")
+    print("This demo is require 'damp11113-library' for run")
+    ins = input("Do you want to install 'damp11113-library'? (y/n): ")
+    if ins.upper() in ["Y", "YES"]:
+        import pip
+        pip.main(["install", "damp11113"])
+        from damp11113 import TextFormatter
+    else:
+        exit()
 
 useraccount = AccountManager()
 useraccount.add_account("admin", "") # create user without password
-useraccount.add_account("test", "test") # create user without password
 
-ssh = Server(useraccount, system_commands=True, system_message=False)
-
-nonamewarning = """Connection Warning:
-Unauthorized access or improper use of this system is prohibited.
-Please ensure you have proper authorization before proceeding."""
-
-Authorizedmessage = """You have successfully connected to the server.
-Enjoy your session and remember to follow security protocols."""
+ssh = Server(useraccount, system_commands=True, system_message=False, sftp=False)
 
 loading = ["PyserSSH", "Extensions"]
 
+print("you connect to this demo using 'ssh admin@localhost -p 2222' (no password)")
+print("command list: passtest, colortest, typing <speed> <text>, renimtest, errortest, inloadtest, loadtest, dialogtest, dialogtest2, dialogtest3, passdialogtest3, choosetest, vieweb <url>, shutdown now")
+print("Do not you this demo private key for real production")
+
 @ssh.on_user("connect")
 def connect(client):
-    Title(client, "PyserSSH")
-    #print(client["windowsize"])
-    if client['current_user'] == "":
-        warningmessage = nonamewarning
-    else:
-        warningmessage = Authorizedmessage
-
-    wm = f"""*********************************************************************************************
+    wm = f"""{pyfiglet.figlet_format('PyserSSH', font='usaflag', width=client["windowsize"]["width"])}*********************************************************************************************
 Hello {client['current_user']},
 
-{warningmessage}
+This is the testing server of PyserSSH v{__version__}.
+For use in product please use new private key.
 
 Visit: {clickable_url("https://damp11113.xyz", "DPCloudev")}
 
 {system_banner}
 *********************************************************************************************"""
 
-    if client['current_user'] != "test":
-        for i in loading:
-            P = indeterminateStatus(client, f"Starting {i}", f"[ OK ] Started {i}")
-            P.start()
+    for i in loading:
+        P = indeterminateStatus(client, f"Starting {i}", f"[ OK ] Started {i}")
+        P.start()
 
-            time.sleep(len(i) / 20)
+        time.sleep(len(i) / 20)
 
-            P.stop()
+        P.stop()
 
-        Di1 = TextDialog(client, "PyserSSH Extension", "Welcome!\n to PyserSSH test server")
-        Di1.render()
+    Di1 = TextDialog(client, "PyserSSH Extension", "Welcome!\n to PyserSSH test server")
+    Di1.render()
 
-        for char in wm:
-            Send(client, char, ln=False)
-            # time.sleep(0.005)  # Adjust the delay as needed
-        Send(client, '\n')  # Send newline after each line
+    for char in wm:
+        Send(client, char, ln=False)
+        # time.sleep(0.005)  # Adjust the delay as needed
+    Send(client, '\n')  # Send newline after each line
 
 @ssh.on_user("error")
 def error(client, error):
@@ -71,7 +75,6 @@ def error(client, error):
         pass
     else:
         Send(client, traceback.format_exc())
-
 
 #@ssh.on_user("onrawtype")
 #def onrawtype(client, key):
@@ -95,11 +98,11 @@ def command(client, command: str):
         Send(client, "")
         Send(client, "TrueColors 24-Bit")
     elif command == "keytest":
-        user = wait_inputkey(client, "press any key", raw=True)
+        user = wait_inputkey(client, "press any key", raw=True, timeout=1)
         Send(client, "")
         Send(client, f"key: {user}")
         for i in range(10):
-            user = wait_inputkey(client, "press any key", raw=True)
+            user = wait_inputkey(client, "press any key", raw=True, timeout=1)
             Send(client, "")
             Send(client, f"key: {user}")
     elif command.startswith("typing"):
@@ -110,10 +113,9 @@ def command(client, command: str):
             Send(client, w, ln=False)
             time.sleep(speed)
         Send(client, "")
-    elif command.startswith("renimtest"):
-        args = shlex.split(command)
+    elif command == "renimtest":
         Clear(client)
-        image = cv2.imread(f"opensource.png", cv2.IMREAD_COLOR)
+        image = cv2.imread(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'opensource.png'), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         width, height = client['windowsize']["width"]-5, client['windowsize']["height"]-5
@@ -126,7 +128,6 @@ def command(client, command: str):
         for y in range(0, height):
             for x in range(0, width):
                 pixel_color = resized[y, x]
-                # PyserSSH.Send(channel, f"Pixel color at ({x}, {y}): {pixel_color}")
                 if pixel_color.tolist() != [0, 0, 0]:
                     t += TextFormatter.format_text_truecolor(" ", background=f"{pixel_color[0]};{pixel_color[1]};{pixel_color[2]}")
                 else:
@@ -192,6 +193,7 @@ def command(client, command: str):
         loading.stop()
         Di1 = TextDialog(client, url, text_content)
         Di1.render()
-
+    elif command == "shutdown now":
+        ssh.stop_server()
 
 ssh.run(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'private_key.pem'))

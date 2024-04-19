@@ -17,31 +17,22 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WA3RRANTIES OF MERCHANTABILITY,
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import shlex
 
-from ..interactive import Send, Clear, Title
+"""
+note
 
-def systemcommand(client, command):
-    if command == "whoami":
-        Send(client, client["current_user"])
-        return True
-    elif command.startswith("title"):
-        args = shlex.split(command)
-        title = args[1]
-        Title(client, title)
-        return True
-    elif command == "exit":
-        client["channel"].close()
-        return True
-    elif command == "clear":
-        Clear(client)
-        return True
-    else:
-        return False
+ansi cursor arrow
+up - \x1b[A
+down - \x1b[B
+left - \x1b[D
+right - \x1b[C
+
+https://en.wikipedia.org/wiki/ANSI_escape_code
+"""

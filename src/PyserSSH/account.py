@@ -60,6 +60,8 @@ class AccountManager:
                 self.save("autosave_session.ses")
                 self.__autosaveworknexttime = time.time() + self.autosavedelay
 
+            time.sleep(1) # fix cpu load
+
     def __saveexit(self):
         self.__autosavework = False
         self.save("autosave_session.ses")
@@ -139,6 +141,15 @@ class AccountManager:
         if username in self.accounts and "sftp_path" in self.accounts[username]:
             return self.accounts[username]["sftp_path"]
         return ""
+
+    def set_banner(self, username, banner):
+        if username in self.accounts:
+            self.accounts[username]["banner"] = banner
+
+    def get_banner(self, username):
+        if username in self.accounts and "banner" in self.accounts[username]:
+            return self.accounts[username]["banner"]
+        return None
 
     def get_user_timeout(self, username):
         if username in self.accounts and "timeout" in self.accounts[username]:

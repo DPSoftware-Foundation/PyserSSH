@@ -36,23 +36,22 @@ from .system.SFTP import SSHSFTPServer
 from .system.interface import Sinterface
 from .interactive import *
 from .system.inputsystem import expect
-from .system.info import system_banner, __version__
+from .system.info import __version__
 
-#paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
+# paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
 
 sftpclient = ["WinSCP", "Xplore"]
 
 logger = logging.getLogger("PyserSSH")
 
 class Server:
-    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=True, sftproot=os.getcwd(), system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{__version__}", inspeed=32768):
+    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=False, sftproot=os.getcwd(), system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{__version__}", inspeed=32768):
         """
          A simple SSH server
         """
         self._event_handlers = {}
         self.sysmess = system_message
         self.client_handlers = {}  # Dictionary to store event handlers for each client
-        self.current_users = {}  # Dictionary to store current_user for each connected client
         self.accounts = accounts
         self.disable_scroll_with_arrow = disable_scroll_with_arrow
         self.sftproot = sftproot
@@ -66,7 +65,9 @@ class Server:
         self.title = title
         self.inspeed = inspeed
 
-        self.system_banner = system_banner
+        self.__processmode = None
+        self.__serverisrunning = False
+        self.__server_stopped = threading.Event()  # Event to signal server stop
 
         if self.enasyscom:
             print("\033[33m!!Warning!! System commands is enable! \033[0m")
@@ -104,7 +105,6 @@ class Server:
             SSHSFTPServer.CLIENTHANDELES = self.client_handlers
             bh_session.set_subsystem_handler('sftp', paramiko.SFTPServer, SSHSFTPServer)
 
-
         if self.compressena:
             bh_session.use_compression(True)
         else:
@@ -139,13 +139,17 @@ class Server:
                     "connecttype": None,
                     "last_login_time": None,
                     "windowsize": {},
-                    "x11": {}
+                    "x11": {},
+                    "prompt": None,
+                    "inputbuffer": None,
+                    "peername": peername
                 }
             client_handler = self.client_handlers[peername]
             client_handler["current_user"] = server.current_user
             client_handler["channel"] = channel  # Update the channel attribute for the client handler
             client_handler["last_activity_time"] = time.time()
             client_handler["last_login_time"] = time.time()
+            client_handler["prompt"] = self.accounts.get_prompt(server.current_user)
 
             self.accounts.set_user_last_login(self.client_handlers[channel.getpeername()]["current_user"], peername[0])
 
@@ -154,10 +158,11 @@ class Server:
                 while self.client_handlers[channel.getpeername()]["windowsize"] == {}:
                     pass
 
-                channel.send(f"\033]0;{self.title}\007".encode())
+                userbanner = self.accounts.get_banner(self.client_handlers[channel.getpeername()]["current_user"])
 
-                if self.sysmess:
-                    channel.sendall(replace_enter_with_crlf(self.system_banner))
+                if self.sysmess or userbanner != None:
+                    channel.send(f"\033]0;{self.title}\007".encode())
+                    channel.sendall(replace_enter_with_crlf(userbanner))
                     channel.sendall(replace_enter_with_crlf("\n"))
 
                 try:
@@ -172,9 +177,9 @@ class Server:
                             channel.setblocking(False)
                             channel.settimeout(self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]))
 
-                        channel.send(replace_enter_with_crlf(self.accounts.get_prompt(self.client_handlers[channel.getpeername()]["current_user"]) + " ").encode('utf-8'))
+                        channel.send(replace_enter_with_crlf(self.client_handlers[channel.getpeername()]["prompt"] + " ").encode('utf-8'))
                         while True:
-                            expect(self, channel, peername)
+                            expect(self, self.client_handlers[channel.getpeername()])
                     except KeyboardInterrupt:
                         self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
                         channel.close()
@@ -206,6 +211,7 @@ class Server:
                 channel = client_handler.get("channel")
                 if channel:
                     channel.close()
+            self.__serverisrunning = True
             self.server.close()
             logger.info("Server stopped.")
         except Exception as e:
@@ -213,23 +219,34 @@ class Server:
 
     def _start_listening_thread(self):
         try:
-            self.server.listen(10)
             logger.info("Start Listening for connections...")
-            while True:
+            while self.__serverisrunning:
                 client, addr = self.server.accept()
-                client_thread = threading.Thread(target=self.handle_client, args=(client, addr))
-                client_thread.start()
+                if self.__processmode == "thread":
+                    client_thread = threading.Thread(target=self.handle_client, args=(client, addr))
+                    client_thread.start()
+                else:
+                    self.handle_client(client, addr)
 
         except Exception as e:
             logger.error(e)
 
-    def run(self, private_key_path, host="0.0.0.0", port=2222):
+    def run(self, private_key_path, host="0.0.0.0", port=2222, mode="thread", maxuser=0, daemon=False):
+        """mode: single, thread"""
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
         self.server.bind((host, port))
         self.private_key = paramiko.RSAKey(filename=private_key_path)
+        if maxuser == 0:
+            self.server.listen()
+        else:
+            self.server.listen(maxuser)
+
+        self.__processmode = mode.lower()
+        self.__serverisrunning = True
 
         client_thread = threading.Thread(target=self._start_listening_thread)
+        client_thread.daemon = daemon
         client_thread.start()
 
     def kickbyusername(self, username, reason=None):

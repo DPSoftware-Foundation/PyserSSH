@@ -35,12 +35,14 @@ from .syscom import systemcommand
 
 logger = logging.getLogger("PyserSSH")
 
-def expect(self, chan, peername, echo=True):
+def expect(self, client, echo=True):
     buffer = bytearray()
     cursor_position = 0
     outindexall = 0
     history_index_position = 0  # Initialize history index position outside the loop
-    currentuser = self.client_handlers[chan.getpeername()]
+    chan = client["channel"]
+    peername = client["peername"]
+
     try:
         while True:
             try:
@@ -66,7 +68,11 @@ def expect(self, chan, peername, echo=True):
                     buffer = buffer[:cursor_position - 1] + buffer[cursor_position:]
                     cursor_position -= 1
                     outindexall -= 1
-                    chan.sendall(b"\b \b")
+                    if cursor_position != outindexall:
+                        chan.sendall(b"\b \b")
+                        chan.sendall(buffer[cursor_position:])
+                    else:
+                        chan.sendall(b"\b \b")
                 else:
                     chan.sendall(b"\x07")
             elif byte == b"\x1b" and chan.recv(1) == b'[':
@@ -76,18 +82,22 @@ def expect(self, chan, peername, echo=True):
                         # Right arrow key, move cursor right if not at the end
                         if cursor_position < len(buffer):
                             chan.sendall(b'\x1b[C')
-                            cursor_position += 1
+                        #    cursor_position += 1
+                            cursor_position = min(len(buffer), cursor_position + 1)
+
                     elif arrow_key == b'D':
                         # Left arrow key, move cursor left if not at the beginning
                         if cursor_position > 0:
                             chan.sendall(b'\x1b[D')
-                            cursor_position -= 1
-                elif self.history:
+                        #    cursor_position -= 1
+                            cursor_position = max(0, cursor_position - 1)
+
+                if self.history:
                     if arrow_key == b'A':
                         if history_index_position == 0:
-                            command = self.accounts.get_lastcommand(currentuser["current_user"])
+                            command = self.accounts.get_lastcommand(client["current_user"])
                         else:
-                            command = self.accounts.get_history(currentuser["current_user"], history_index_position)
+                            command = self.accounts.get_history(client["current_user"], history_index_position)
 
                         # Clear the buffer
                         for i in range(cursor_position):
@@ -105,9 +115,9 @@ def expect(self, chan, peername, echo=True):
                     elif arrow_key == b'B':
                         if history_index_position != -1:
                             if history_index_position == 0:
-                                command = self.accounts.get_lastcommand(currentuser["current_user"])
+                                command = self.accounts.get_lastcommand(client["current_user"])
                             else:
-                                command = self.accounts.get_history(currentuser["current_user"], history_index_position)
+                                command = self.accounts.get_history(client["current_user"], history_index_position)
 
                             # Clear the buffer
                             for i in range(cursor_position):
@@ -139,8 +149,10 @@ def expect(self, chan, peername, echo=True):
                 self._handle_event("ontype", self.client_handlers[chan.getpeername()], byte)
                 if echo:
                     if outindexall != cursor_position:
+                        chan.sendall(b" ")
+                        chan.sendall(b'\033[s')
                         chan.sendall(byte + buffer[cursor_position:])
-                        chan.sendall(f"\033[{cursor_position}G".encode())
+                        chan.sendall(b'\033[u')
                     else:
                         chan.sendall(byte)
 
@@ -149,13 +161,15 @@ def expect(self, chan, peername, echo=True):
                 cursor_position += 1
                 outindexall += 1
 
+            client["inputbuffer"] = buffer
+
         if echo:
             chan.sendall(b'\r\n')
 
         command = str(buffer.decode('utf-8')).strip()
 
-        if self.history and command.strip() != "" and self.accounts.get_lastcommand(currentuser["current_user"]) != command:
-            self.accounts.add_history(currentuser["current_user"], command)
+        if self.history and command.strip() != "" and self.accounts.get_lastcommand(client["current_user"]) != command:
+            self.accounts.add_history(client["current_user"], command)
 
         if command.strip() != "":
             if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != None:
@@ -164,25 +178,25 @@ def expect(self, chan, peername, echo=True):
 
             try:
                 if self.enasyscom:
-                    sct = systemcommand(currentuser, command)
+                    sct = systemcommand(client, command)
                 else:
                     sct = False
 
                 if not sct:
                     if self.XHandler != None:
-                        self._handle_event("beforexhandler", currentuser, command)
+                        self._handle_event("beforexhandler", client, command)
 
-                        self.XHandler.call(currentuser, command)
+                        self.XHandler.call(client, command)
 
-                        self._handle_event("afterxhandler", currentuser, command)
+                        self._handle_event("afterxhandler", client, command)
                     else:
-                        self._handle_event("command", currentuser, command)
+                        self._handle_event("command", client, command)
 
             except Exception as e:
-                self._handle_event("error", currentuser, e)
+                self._handle_event("error", client, e)
 
         try:
-            chan.send(replace_enter_with_crlf(self.accounts.get_prompt(currentuser["current_user"]) + " ").encode('utf-8'))
+            chan.send(replace_enter_with_crlf(client["prompt"] + " ").encode('utf-8'))
         except:
             logger.error("Send error")
 

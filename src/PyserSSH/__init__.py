@@ -42,8 +42,9 @@ import logging
 from .interactive import *
 from .server import Server
 from .account import AccountManager
-from .system.info import system_banner
 
+
+from .system.info import system_banner
 
 try:
     os.environ["pyserssh_systemmessage"]
@@ -66,3 +67,10 @@ if os.environ["pyserssh_log"] == "NO":
 
 if os.environ["pyserssh_systemmessage"] == "YES":
     print(system_banner)
+
+if __name__ == "__main__":
+    stadem = input("Do you want to run demo? (y/n): ")
+    if stadem.upper() in ["Y", "YES"]:
+        from .demo import demo1
+    else:
+        exit()
