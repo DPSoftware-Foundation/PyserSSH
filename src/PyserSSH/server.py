@@ -36,7 +36,7 @@ from .system.SFTP import SSHSFTPServer
 from .system.interface import Sinterface
 from .interactive import *
 from .system.inputsystem import expect
-from .system.info import __version__
+from .system.info import __version__, system_banner
 
 # paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
 
@@ -67,7 +67,7 @@ class Server:
 
         self.__processmode = None
         self.__serverisrunning = False
-        self.__server_stopped = threading.Event()  # Event to signal server stop
+        self.__daemon = False
 
         if self.enasyscom:
             print("\033[33m!!Warning!! System commands is enable! \033[0m")
@@ -162,7 +162,15 @@ class Server:
 
                 if self.sysmess or userbanner != None:
                     channel.send(f"\033]0;{self.title}\007".encode())
-                    channel.sendall(replace_enter_with_crlf(userbanner))
+
+                    if userbanner is None and self.sysmess:
+                        channel.sendall(replace_enter_with_crlf(system_banner))
+                    elif userbanner != None and self.sysmess:
+                        channel.sendall(replace_enter_with_crlf(system_banner))
+                        channel.sendall(replace_enter_with_crlf(userbanner))
+                    elif userbanner != None and not self.sysmess:
+                        channel.sendall(replace_enter_with_crlf(userbanner))
+
                     channel.sendall(replace_enter_with_crlf("\n"))
 
                 try:
@@ -171,6 +179,7 @@ class Server:
                     self._handle_event("error", self.client_handlers[channel.getpeername()], e)
 
                 client_handler["connecttype"] = "ssh"
+
                 if self.enainputsystem:
                     try:
                         if self.accounts.get_user_timeout(self.client_handlers[channel.getpeername()]["current_user"]) != None:
@@ -223,11 +232,12 @@ class Server:
             while self.__serverisrunning:
                 client, addr = self.server.accept()
                 if self.__processmode == "thread":
-                    client_thread = threading.Thread(target=self.handle_client, args=(client, addr))
+                    client_thread = threading.Thread(target=self.handle_client, args=(client, addr), daemon=self.__daemon)
                     client_thread.start()
                 else:
                     self.handle_client(client, addr)
-
+        except KeyboardInterrupt:
+            self.stop_server()
         except Exception as e:
             logger.error(e)
 
@@ -244,9 +254,9 @@ class Server:
 
         self.__processmode = mode.lower()
         self.__serverisrunning = True
+        self.__daemon = daemon
 
-        client_thread = threading.Thread(target=self._start_listening_thread)
-        client_thread.daemon = daemon
+        client_thread = threading.Thread(target=self._start_listening_thread, daemon=self.__daemon)
         client_thread.start()
 
     def kickbyusername(self, username, reason=None):
