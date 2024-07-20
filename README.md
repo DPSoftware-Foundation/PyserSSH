@@ -2,6 +2,9 @@
 
 PyserSSH is a library for remote control your code with ssh client. The aim is to provide a scriptable SSH server which can be made to behave like any SSH-enabled device.
 
+## Some smail PyserSSH history
+PyserSSH version [1.0](https://github.com/DPSoftware-Foundation/PyserSSH/releases/download/Legacy/PyserSSH10.py) was created in 2023/9/15 for experimental purposes only. Because I couldn't find the best ssh server library for python and I started this project only for research. But I have time to develop this research into a real library for use. In software or server.
+
 This project is part from [damp11113-library](https://github.com/damp11113/damp11113-library)
 
 This Server use port **2222** for default port
