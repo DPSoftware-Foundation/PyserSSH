@@ -18,7 +18,7 @@ setup(
         "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: MIT License",
         "Intended Audience :: Developers",
-        "Intended Audience :: System Administrators"
+        "Intended Audience :: System Administrators",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3.10",
         "Topic :: Communications",
