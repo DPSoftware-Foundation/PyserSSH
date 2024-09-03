@@ -15,7 +15,7 @@ setup(
     keywords="SSH server",
     python_requires='>=3.6',
     classifiers=[
-        "Development Status :: 5 - Production/Stable"
+        "Development Status :: 5 - Production/Stable",
         "License :: OSI Approved :: MIT License",
         "Intended Audience :: Developers",
         "Intended Audience :: System Administrators"
