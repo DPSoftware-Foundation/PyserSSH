@@ -4,6 +4,9 @@ PyserSSH is a free and open-source Python library designed to facilitate the cre
 
 The project was started by a solo developer to create a more accessible and flexible tool for managing SSH connections and commands. It offers a simplified API compared to other libraries, such as Paramiko, SSHim, and Twisted, which are either outdated or complex for new users.
 
+## Some smail PyserSSH history
+PyserSSH version [1.0](https://github.com/DPSoftware-Foundation/PyserSSH/releases/download/Legacy/PyserSSH10.py) (real filename is "test277.py") was created in 2023/9/3 for experimental purposes only. Because I couldn't find the best ssh server library for python and I started this project only for research. But I have time to develop this research into a real library for use. In software or server.
+
 This project is part from [damp11113-library](https://github.com/damp11113/damp11113-library)
 
 ## Some small PyserSSH history
