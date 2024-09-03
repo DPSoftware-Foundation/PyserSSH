@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -30,16 +30,19 @@ import shlex
 
 from ..interactive import Send
 
+def are_permissions_met(permission_list, permission_require):
+    return set(permission_require).issubset(set(permission_list))
+
 class XHandler:
     def __init__(self, enablehelp=True, showusageonworng=True):
         self.handlers = {}
         self.categories = {}
         self.enablehelp = enablehelp
         self.showusageonworng = showusageonworng
-
+        self.serverself = None
         self.commandnotfound = None
 
-    def command(self, category=None, name=None, aliases=None):
+    def command(self, category=None, name=None, aliases=None, permissions: list = None):
         def decorator(func):
             nonlocal name, category
             if name is None:
@@ -48,21 +51,32 @@ class XHandler:
             command_description = func.__doc__  # Read the docstring
             parameters = inspect.signature(func).parameters
             command_args = []
+            has_args = False
+            has_kwargs = False
+            
             for param in list(parameters.values())[1:]:  # Exclude first parameter (client)
-                if param.default != inspect.Parameter.empty:  # Check if parameter has default value
+                if param.kind == inspect.Parameter.VAR_POSITIONAL:
+                    has_args = True
+                elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                    has_kwargs = True
+                elif param.default != inspect.Parameter.empty:  # Check if parameter has default value
                     if param.annotation == bool:
-                        command_args.append(f"-{param.name}")
+                        command_args.append(f"--{param.name}")
                     else:
                         command_args.append((f"{param.name}", param.default))
                 else:
                     command_args.append(param.name)
+            
             if category is None:
                 category = 'No Category'
             if category not in self.categories:
                 self.categories[category] = {}
             self.categories[category][command_name] = {
                 'description': command_description.strip() if command_description else "",
-                'args': command_args
+                'args': command_args,
+                "permissions": permissions,
+                'has_args': has_args,
+                'has_kwargs': has_kwargs
             }
             self.handlers[command_name] = func
             if aliases:
@@ -76,6 +90,7 @@ class XHandler:
         tokens = shlex.split(command_string)
         command_name = tokens[0]
         args = tokens[1:]
+        
         if command_name == "help" and self.enablehelp:
             if args:
                 Send(client, self.get_help_command_info(args[0]))
@@ -85,58 +100,68 @@ class XHandler:
         else:
             if command_name in self.handlers:
                 command_func = self.handlers[command_name]
+                command_info = self.get_command_info(command_name)
+                if command_info and command_info.get('permissions'):
+                    if not are_permissions_met(self.serverself.accounts.get_permissions(client.get_name()), command_info.get('permissions')):
+                        Send(client, f"Permission denied. You do not have permission to execute '{command_name}'.")
+                        return
+
                 command_args = inspect.signature(command_func).parameters
-                if len(args) % 2 != 0 and not args[0].startswith("--"):
-                    if self.showusageonworng:
-                        Send(client, self.get_help_command_info(command_name))
-                    else:
-                        Send(client, f"Invalid number of arguments for command '{command_name}'.")
-                    return
-                # Parse arguments
                 final_args = {}
-                for i in range(0, len(args), 2):
-                    if args[i].startswith("--"):
-                        arg_name = args[i].lstrip('--')
+                final_kwargs = {}
+                i = 0
+
+                while i < len(args):
+                    arg = args[i]
+                    if arg.startswith('-'):
+                        arg_name = arg.lstrip('-')
                         if arg_name not in command_args:
                             if self.showusageonworng:
                                 Send(client, self.get_help_command_info(command_name))
-                            else:
-                                Send(client, f"Invalid flag '{arg_name}' for command '{command_name}'.")
+                            Send(client, f"Invalid flag '{arg_name}' for command '{command_name}'.")
                             return
-                        try:
-                            args[i + 1]
-                        except:
-                            pass
+                        if command_args[arg_name].annotation == bool:
+                            final_args[arg_name] = True
+                            i += 1
                         else:
-                            if self.showusageonworng:
-                                Send(client, self.get_help_command_info(command_name))
+                            if i + 1 < len(args):
+                                final_args[arg_name] = args[i + 1]
+                                i += 2
                             else:
-                                Send(client, f"value '{args[i + 1]}' not available for '{arg_name}' flag for command '{command_name}'.")
-                            return
-                        final_args[arg_name] = True
+                                if self.showusageonworng:
+                                    Send(client, self.get_help_command_info(command_name))
+                                Send(client, f"Missing value for flag '{arg_name}' for command '{command_name}'.")
+                                return
                     else:
-                        arg_name = args[i].lstrip('-')
-                        if arg_name not in command_args:
-                            if self.showusageonworng:
-                                Send(client, self.get_help_command_info(command_name))
+                        if command_info['has_args']:
+                            final_args.setdefault('args', []).append(arg)
+                        elif command_info['has_kwargs']:
+                            final_kwargs[arg] = args[i + 1] if i + 1 < len(args) else None
+                            i += 1
+                        else:
+                            if len(final_args) + 1 < len(command_args):
+                                param = list(command_args.values())[len(final_args) + 1]
+                                final_args[param.name] = arg
                             else:
-                                Send(client, f"Invalid argument '{arg_name}' for command '{command_name}'.")
-                            return
-                        arg_value = args[i + 1]
-                        final_args[arg_name] = arg_value
-                # Match parsed arguments to function parameters
-                final_args_list = []
+                                if self.showusageonworng:
+                                    Send(client, self.get_help_command_info(command_name))
+                                Send(client, f"Unexpected argument '{arg}' for command '{command_name}'.")
+                                return
+                        i += 1
+
+                # Check for required positional arguments
                 for param in list(command_args.values())[1:]:  # Skip client argument
-                    if param.name in final_args:
-                        final_args_list.append(final_args[param.name])
-                    elif param.default != inspect.Parameter.empty:
-                        final_args_list.append(param.default)
-                    else:
+                    if param.name not in final_args and param.default == inspect.Parameter.empty:
                         if self.showusageonworng:
                             Send(client, self.get_help_command_info(command_name))
-                        else:
-                            Send(client, f"Missing required argument '{param.name}' for command '{command_name}'")
+                        Send(client, f"Missing required argument '{param.name}' for command '{command_name}'")
                         return
+
+                final_args_list = [final_args.get(param.name, param.default) for param in list(command_args.values())[1:]]
+
+                if command_info['has_kwargs']:
+                    final_args_list.append(final_kwargs)
+
                 return command_func(client, *final_args_list)
             else:
                 if self.commandnotfound:
@@ -165,7 +190,10 @@ class XHandler:
                 'name': command_name,
                 'description': found_command['description'].strip() if found_command['description'] else "",
                 'args': found_command['args'],
-                'category': category
+                'category': category,
+                'permissions': found_command['permissions'],
+                'has_args': found_command['has_args'],
+                'has_kwargs': found_command['has_kwargs']
             }
 
     def get_help_command_info(self, command):
@@ -185,6 +213,10 @@ class XHandler:
                     help_message += f" [-{arg[0]} {arg[1]}]"
             else:
                 help_message += f" <{arg}>"
+        if command_info['has_args']:
+            help_message += " [<args>...]"
+        if command_info['has_kwargs']:
+            help_message += " [--<key>=<value>...]"
         return help_message
 
     def get_help_message(self):
@@ -203,3 +235,4 @@ class XHandler:
         for category, commands in self.categories.items():
             all_commands[category] = commands
         return all_commands
+

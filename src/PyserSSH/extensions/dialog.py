@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -31,7 +31,7 @@ from ..interactive import Clear, Send, wait_inputkey
 from ..system.sysfunc import text_centered_screen
 
 class TextDialog:
-    def __init__(self, client, title="", content=""):
+    def __init__(self, client, content="", title=""):
         self.client = client
 
         self.windowsize = client["windowsize"]

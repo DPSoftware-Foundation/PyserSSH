@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -27,8 +27,6 @@ SOFTWARE.
 import socket
 import time
 import logging
-import shlex
-import traceback
 
 from .sysfunc import replace_enter_with_crlf
 from .syscom import systemcommand
@@ -53,7 +51,7 @@ def expect(self, client, echo=True):
                 chan.close()
                 raise EOFError()
 
-            self._handle_event("onrawtype", self.client_handlers[chan.getpeername()], byte)
+            self._handle_event("rawtype", self.client_handlers[chan.getpeername()], byte)
 
             self.client_handlers[chan.getpeername()]["last_activity_time"] = time.time()
 
@@ -146,7 +144,7 @@ def expect(self, client, echo=True):
             else:
                 history_index_position = -1
 
-                self._handle_event("ontype", self.client_handlers[chan.getpeername()], byte)
+                self._handle_event("type", self.client_handlers[chan.getpeername()], byte)
                 if echo:
                     if outindexall != cursor_position:
                         chan.sendall(b" ")
@@ -170,6 +168,7 @@ def expect(self, client, echo=True):
 
         if self.history and command.strip() != "" and self.accounts.get_lastcommand(client["current_user"]) != command:
             self.accounts.add_history(client["current_user"], command)
+            client["last_command"] = command
 
         if command.strip() != "":
             if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != None:
@@ -194,11 +193,11 @@ def expect(self, client, echo=True):
 
             except Exception as e:
                 self._handle_event("error", client, e)
-
-        try:
-            chan.send(replace_enter_with_crlf(client["prompt"] + " ").encode('utf-8'))
-        except:
-            logger.error("Send error")
+        if echo:
+            try:
+                chan.send(replace_enter_with_crlf(client["prompt"] + " "))
+            except:
+                logger.error("Send error")
 
         chan.setblocking(False)
         chan.settimeout(None)
@@ -206,14 +205,15 @@ def expect(self, client, echo=True):
         if self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]) != None:
             chan.setblocking(False)
             chan.settimeout(self.accounts.get_user_timeout(self.client_handlers[chan.getpeername()]["current_user"]))
-
+    except socket.error:
+        pass
     except Exception as e:
         logger.error(str(e))
     finally:
         try:
             if not byte:
                 logger.info(f"{peername} is disconnected")
-                self._handle_event("disconnected", self.client_handlers[peername]["current_user"])
+                self._handle_event("disconnected", self.client_handlers[peername])
         except:
-            logger.info(f"{peername} is disconnected by timeout")
-            self._handle_event("timeout", self.client_handlers[peername]["current_user"])
+            logger.info(f"{peername} is disconnected")
+            self._handle_event("disconnected", self.client_handlers[peername])

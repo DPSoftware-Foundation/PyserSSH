@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -24,7 +24,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-# this file is from damp11113-library
+# this file is from DPSoftware Foundation-library
 
 from itertools import cycle
 import math
@@ -37,10 +37,97 @@ from ..system.sysfunc import replace_enter_with_crlf
 def Print(channel, string, start="", end="\n"):
     channel.send(replace_enter_with_crlf(start + string + end))
 
-try:
-    from damp11113.utils import get_size_unit2, center_string, TextFormatter, insert_string
-except:
-    raise ModuleNotFoundError("This extension is require damp11113-library")
+def get_size_unit2(number, unitp, persec=True, unitsize=1024, decimal=True, space=" "):
+    for unit in ['', 'K', 'M', 'G', 'T', 'P']:
+        if number < unitsize:
+            if decimal:
+                num = f"{number:.2f}"
+            else:
+                num = int(number)
+
+            if persec:
+                return f"{num}{space}{unit}{unitp}/s"
+            else:
+                return f"{num}{space}{unit}{unitp}"
+        number /= unitsize
+
+def center_string(main_string, replacement_string):
+    # Find the center index of the main string
+    center_index = len(main_string) // 2
+
+    # Calculate the start and end indices for replacing
+    start_index = center_index - len(replacement_string) // 2
+    end_index = start_index + len(replacement_string)
+
+    # Replace the substring at the center
+    new_string = main_string[:start_index] + replacement_string + main_string[end_index:]
+
+    return new_string
+
+class TextFormatter:
+    RESET = "\033[0m"
+    TEXT_COLORS = {
+        "black": "\033[30m",
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "yellow": "\033[33m",
+        "blue": "\033[34m",
+        "magenta": "\033[35m",
+        "cyan": "\033[36m",
+        "white": "\033[37m"
+    }
+    TEXT_COLOR_LEVELS = {
+        "light": "\033[1;{}m",  # Light color prefix
+        "dark": "\033[2;{}m"  # Dark color prefix
+    }
+    BACKGROUND_COLORS = {
+        "black": "\033[40m",
+        "red": "\033[41m",
+        "green": "\033[42m",
+        "yellow": "\033[43m",
+        "blue": "\033[44m",
+        "magenta": "\033[45m",
+        "cyan": "\033[46m",
+        "white": "\033[47m"
+    }
+    TEXT_ATTRIBUTES = {
+        "bold": "\033[1m",
+        "italic": "\033[3m",
+        "underline": "\033[4m",
+        "blink": "\033[5m",
+        "reverse": "\033[7m",
+        "strikethrough": "\033[9m"
+    }
+
+    @staticmethod
+    def format_text(text, color=None, color_level=None, background=None, attributes=None, target_text=''):
+        formatted_text = ""
+        start_index = text.find(target_text)
+        end_index = start_index + len(target_text) if start_index != -1 else len(text)
+
+        if color in TextFormatter.TEXT_COLORS:
+            if color_level in TextFormatter.TEXT_COLOR_LEVELS:
+                color_code = TextFormatter.TEXT_COLORS[color]
+                color_format = TextFormatter.TEXT_COLOR_LEVELS[color_level].format(color_code)
+                formatted_text += color_format
+            else:
+                formatted_text += TextFormatter.TEXT_COLORS[color]
+
+        if background in TextFormatter.BACKGROUND_COLORS:
+            formatted_text += TextFormatter.BACKGROUND_COLORS[background]
+
+        if attributes in TextFormatter.TEXT_ATTRIBUTES:
+            formatted_text += TextFormatter.TEXT_ATTRIBUTES[attributes]
+
+        if target_text == "":
+            formatted_text += text + TextFormatter.RESET
+        else:
+            formatted_text += text[:start_index] + text[start_index:end_index] + TextFormatter.RESET + text[end_index:]
+
+        return formatted_text
+
+def insert_string(base, inserted, position=0):
+    return base[:position] + inserted + base[position + len(inserted):]
 
 steps1 = ['[   ]', '[-  ]', '[-- ]', '[---]', '[ --]', '[  -]']
 steps2 = ['[   ]', '[-  ]', '[ - ]', '[  -]']

@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -24,30 +24,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-
+import os
 import pickle
 import time
 import atexit
 import threading
+import hashlib
 
 class AccountManager:
-    def __init__(self, anyuser=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autoloadfile="autosave_session.ses"):
+    def __init__(self, allow_guest=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autoloadfile="autosave_session.ses"):
         self.accounts = {}
-        self.anyuser = anyuser
+        self.allow_guest = allow_guest
         self.historylimit = historylimit
         self.autosavedelay = autosavedelay
 
         self.__autosavework = False
         self.__autosaveworknexttime = 0
 
-        if self.anyuser:
-            print("history system can't work if 'anyuser' is enable")
-
         if autoload:
             self.load(autoloadfile)
 
         if autosave:
-            self.__autosavethread = threading.Thread(target=self.__autosave)
+            self.__autosavethread = threading.Thread(target=self.__autosave, daemon=True)
             self.__autosavethread.start()
             atexit.register(self.__saveexit)
 
@@ -67,37 +65,89 @@ class AccountManager:
         self.save("autosave_session.ses")
         self.__autosavethread.join()
 
-    def validate_credentials(self, username, password):
-        if username in self.accounts and self.accounts[username]["password"] == password or self.anyuser:
+    def validate_credentials(self, username, password=None, public_key=None):
+        if self.allow_guest and not self.has_user(username):
             return True
+
+        allowed_auth_list = str(self.accounts[username].get("allowed_auth", "")).split(",")
+
+        # Check password authentication
+        if password is not None and "password" in allowed_auth_list:
+            stored_password = self.accounts[username].get("password", "")
+            return stored_password == hashlib.md5(password.encode()).hexdigest()
+
+        # Check public key authentication
+        if public_key is not None and "publickey" in allowed_auth_list:
+            stored_public_key = self.accounts[username].get("public_key", "")
+            return stored_public_key == public_key
+
+        # Check if 'none' authentication is allowed
+        if "none" in allowed_auth_list:
+            return True
+
         return False
 
+    def has_user(self, username):
+        return username in self.accounts
+
+    def get_allowed_auths(self, username):
+        if self.has_user(username) and "allowed_auth" in self.accounts[username]:
+            return self.accounts[username]["allowed_auth"]
+        return "none"
+
     def get_permissions(self, username):
-        if username in self.accounts:
+        if self.has_user(username):
             return self.accounts[username]["permissions"]
         return []
 
     def set_prompt(self, username, prompt=">"):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["prompt"] = prompt
 
     def get_prompt(self, username):
-        if username in self.accounts and "prompt" in self.accounts[username]:
+        if self.has_user(username) and "prompt" in self.accounts[username]:
             return self.accounts[username]["prompt"]
         return ">"  # Default prompt if not set for the user
 
-    def add_account(self, username, password, permissions={}):
-        self.accounts[username] = {"password": password, "permissions": permissions}
+    def add_account(self, username, password=None, public_key=None, permissions:list=None):
+        if not self.has_user(username):
+            allowedlist = []
+            accountkey = {}
+
+            if permissions is None:
+                permissions = []
+
+            if password != None:
+                allowedlist.append("password")
+                accountkey["password"] = hashlib.md5(password.encode()).hexdigest()
+
+            if public_key != None:
+                allowedlist.append("publickey")
+                accountkey["public_key"] = public_key
+
+            if password is None and public_key is None:
+                allowedlist.append("none")
+
+            accountkey["permissions"] = permissions
+            accountkey["allowed_auth"] = ",".join(allowedlist)
+
+            self.accounts[username] = accountkey
+        else:
+            raise Exception(f"{username} is exist")
+
+    def remove_account(self, username):
+        if self.has_user(username):
+            del self.accounts[username]
 
     def change_password(self, username, new_password):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["password"] = new_password
 
     def set_permissions(self, username, new_permissions):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["permissions"] = new_permissions
 
-    def save(self, filename="session.ssh"):
+    def save(self, filename="session.ses"):
         with open(filename, 'wb') as file:
             pickle.dump(self.accounts, file)
 
@@ -111,103 +161,115 @@ class AccountManager:
             print(f"An error occurred: {e}. No accounts loaded.")
 
     def set_user_sftp_allow(self, username, allow=True):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["sftp_allow"] = allow
 
     def get_user_sftp_allow(self, username):
-        if username in self.accounts and "sftp_allow" in self.accounts[username]:
-            if self.anyuser:
-                return True
+        if self.has_user(username) and "sftp_allow" in self.accounts[username]:
             return self.accounts[username]["sftp_allow"]
-        return True
+        return False
 
     def set_user_sftp_readonly(self, username, readonly=False):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["sftp_readonly"] = readonly
 
     def get_user_sftp_readonly(self, username):
-        if username in self.accounts and "sftp_readonly" in self.accounts[username]:
+        if self.has_user(username) and "sftp_readonly" in self.accounts[username]:
             return self.accounts[username]["sftp_readonly"]
         return False
 
-    def set_user_sftp_path(self, username, path="/"):
-        if username in self.accounts:
+    def set_user_sftp_root_path(self, username, path="/"):
+        if self.has_user(username):
             if path == "/":
-                self.accounts[username]["sftp_path"] = ""
+                self.accounts[username]["sftp_root_path"] = os.getcwd()
             else:
-                self.accounts[username]["sftp_path"] = path
+                self.accounts[username]["sftp_root_path"] = path
 
-    def get_user_sftp_path(self, username):
-        if username in self.accounts and "sftp_path" in self.accounts[username]:
-            return self.accounts[username]["sftp_path"]
-        return ""
+    def get_user_sftp_root_path(self, username):
+        if self.has_user(username) and "sftp_root_path" in self.accounts[username]:
+            return self.accounts[username]["sftp_root_path"]
+        return os.getcwd()
+
+    def set_user_enable_inputsystem(self, username, enable=True):
+        if self.has_user(username):
+            self.accounts[username]["inputsystem"] = enable
+
+    def get_user_enable_inputsystem(self, username):
+        if self.has_user(username) and "inputsystem" in self.accounts[username]:
+            return self.accounts[username]["inputsystem"]
+        return True
+
+    def set_user_enable_inputsystem_echo(self, username, echo=True):
+        if self.has_user(username):
+            self.accounts[username]["inputsystem_echo"] = echo
+
+    def get_user_enable_inputsystem_echo(self, username):
+        if self.has_user(username) and "inputsystem_echo" in self.accounts[username]:
+            return self.accounts[username]["inputsystem_echo"]
+        return True
 
     def set_banner(self, username, banner):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["banner"] = banner
 
     def get_banner(self, username):
-        if username in self.accounts and "banner" in self.accounts[username]:
+        if self.has_user(username) and "banner" in self.accounts[username]:
             return self.accounts[username]["banner"]
         return None
 
     def get_user_timeout(self, username):
-        if username in self.accounts and "timeout" in self.accounts[username]:
+        if self.has_user(username) and "timeout" in self.accounts[username]:
             return self.accounts[username]["timeout"]
         return None
 
     def set_user_timeout(self, username, timeout=None):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["timeout"] = timeout
 
     def get_user_last_login(self, username):
-        if username in self.accounts and "lastlogin" in self.accounts[username]:
+        if self.has_user(username) and "lastlogin" in self.accounts[username]:
             return self.accounts[username]["lastlogin"]
         return None
 
     def set_user_last_login(self, username, ip, timelogin=time.time()):
-        if username in self.accounts:
+        if self.has_user(username):
             self.accounts[username]["lastlogin"] = {
                 "ip": ip,
                 "time": timelogin
             }
 
     def add_history(self, username, command):
-        if not self.anyuser:
-            if username in self.accounts:
-                if "history" not in self.accounts[username]:
-                    self.accounts[username]["history"] = []  # Initialize history list if it doesn't exist
-
-                history_limit = self.historylimit if self.historylimit is not None else float('inf')
-                self.accounts[username]["history"].append(command)
-                self.accounts[username]["lastcommand"] = command
-                # Trim history to the specified limit
-                if self.historylimit != None:
-                    if len(self.accounts[username]["history"]) > history_limit:
-                        self.accounts[username]["history"] = self.accounts[username]["history"][-history_limit:]
-
-    def clear_history(self, username):
-        if not self.anyuser:
-            if username in self.accounts:
+        if self.has_user(username):
+            if "history" not in self.accounts[username]:
                 self.accounts[username]["history"] = []  # Initialize history list if it doesn't exist
 
+            history_limit = self.historylimit if self.historylimit is not None else float('inf')
+            self.accounts[username]["history"].append(command)
+            self.accounts[username]["lastcommand"] = command
+            # Trim history to the specified limit
+            if self.historylimit != None:
+                if len(self.accounts[username]["history"]) > history_limit:
+                    self.accounts[username]["history"] = self.accounts[username]["history"][-history_limit:]
+
+    def clear_history(self, username):
+        if self.has_user(username):
+            self.accounts[username]["history"] = []  # Initialize history list if it doesn't exist
+
     def get_history(self, username, index, getall=False):
-        if not self.anyuser:
-            if username in self.accounts and "history" in self.accounts[username]:
-                history = self.accounts[username]["history"]
-                history.reverse()
-                if getall:
-                    return history
+        if self.has_user(username) and "history" in self.accounts[username]:
+            history = self.accounts[username]["history"]
+            history.reverse()
+            if getall:
+                return history
+            else:
+                if index < len(history):
+                    return history[index]
                 else:
-                    if index < len(history):
-                        return history[index]
-                    else:
-                        return None  # Index out of range
-            return None  # User or history not found
+                    return None  # Index out of range
+        return None  # User or history not found
 
     def get_lastcommand(self, username):
-        if not self.anyuser:
-            if username in self.accounts and "lastcommand" in self.accounts[username]:
-                command = self.accounts[username]["lastcommand"]
-                return command
-            return None  # User or history not found
+        if self.has_user(username) and "lastcommand" in self.accounts[username]:
+            command = self.accounts[username]["lastcommand"]
+            return command
+        return None  # User or history not found

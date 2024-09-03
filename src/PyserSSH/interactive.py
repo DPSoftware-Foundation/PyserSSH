@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -29,12 +29,41 @@ import socket
 
 from .system.sysfunc import replace_enter_with_crlf
 
-def Send(client, string, ln=True):
-    channel = client["channel"]
+def Send(client, string, ln=True, directchannel=False):
+    if directchannel:
+        channel = client
+    else:
+        channel = client["channel"]
+
     if ln:
         channel.send(replace_enter_with_crlf(str(string) + "\n"))
     else:
         channel.send(replace_enter_with_crlf(str(string)))
+
+def NewSend(client, *astring, ln=True, end=b'\n', sep=b' ', directchannel=False):
+    if directchannel:
+        channel = client
+    else:
+        channel = client["channel"]
+
+    if ln:
+        if not b'\n' in end:
+            end += b'\n'
+    else:
+        # Ensure that `end` does not contain `b'\n'` if `ln` is False
+        end = end.replace(b'\n', b'')
+
+    # Prepare the strings to be sent
+    if astring:
+        for i, s in enumerate(astring):
+            # Convert `s` to bytes if it's a string
+            if isinstance(s, str):
+                s = s.encode('utf-8')
+            # Use a hypothetical `replace_enter_with_crlf` function if needed
+            channel.send(replace_enter_with_crlf(s))
+            if i != len(astring) - 1:
+                channel.send(sep)
+        channel.send(end)
 
 def Clear(client, oldclear=False, keep=False):
     sx, sy = client["windowsize"]["width"], client["windowsize"]["height"]
@@ -123,7 +152,7 @@ def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=T
     else:
         return output
 
-def wait_inputkey(client, prompt="", raw=False, timeout=0):
+def wait_inputkey(client, prompt="", raw=True, timeout=0):
     channel = client["channel"]
 
     if prompt != "":
@@ -150,8 +179,51 @@ def wait_inputkey(client, prompt="", raw=False, timeout=0):
     except socket.timeout:
         channel.setblocking(False)
         channel.settimeout(None)
-        channel.send("\r\n")
+        if prompt != "":
+            channel.send("\r\n")
         return None
+    except Exception:
+        channel.setblocking(False)
+        channel.settimeout(None)
+        channel.send("\r\n")
+        raise
+
+def wait_inputmouse(client, timeout=0):
+    channel = client["channel"]
+    Send(client, "\033[?1000h", ln=False)
+
+    if timeout != 0:
+        channel.settimeout(timeout)
+
+    try:
+        byte = channel.recv(10)
+
+        if not byte or byte == b'\x04':
+            raise EOFError()
+
+        if byte.startswith(b'\x1b[M'):
+            # Parse mouse event
+            if len(byte) < 6 or not byte.startswith(b'\x1b[M'):
+                Send(client, "\033[?1000l", ln=False)
+                return None, None, None
+
+                # Extract button, x, y from the sequence
+            button = byte[3] - 32
+            x = byte[4] - 32
+            y = byte[5] - 32
+
+            Send(client, "\033[?1000l", ln=False)
+            return button, x, y
+        else:
+            Send(client, "\033[?1000l", ln=False)
+            return byte, None, None
+
+    except socket.timeout:
+        channel.setblocking(False)
+        channel.settimeout(None)
+        channel.send("\r\n")
+        Send(client, "\033[?1000l", ln=False)
+        return None, None, None
     except Exception:
         channel.setblocking(False)
         channel.settimeout(None)
@@ -176,18 +248,18 @@ def wait_choose(client, choose, prompt="", timeout=0):
             exported = " ".join(tempchooselist)
 
             if prompt.strip() == "":
-                Send(channel, f'\r{exported}', ln=False)
+                Send(client, f'\r{exported}', ln=False)
             else:
-                Send(channel, f'\r{prompt}{exported}', ln=False)
+                Send(client, f'\r{prompt}{exported}', ln=False)
 
-            keyinput = wait_inputkey(channel, raw=True)
+            keyinput = wait_inputkey(client, raw=True)
 
             if keyinput == b'\r':  # Enter key
-                Send(channel, "\033[K")
+                Send(client, "\033[K")
                 return chooseindex
             elif keyinput == b'\x03':  # ' ctrl+c' key for cancel
-                Send(channel, "\033[K")
-                return None
+                Send(client, "\033[K")
+                return 0
             elif keyinput == b'\x1b[D':  # Up arrow key
                 chooseindex -= 1
                 if chooseindex < 0:

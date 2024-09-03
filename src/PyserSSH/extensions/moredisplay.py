@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -24,68 +24,35 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import time
+
+from ..interactive import Send
 
 def clickable_url(url, link_text=""):
     return f"\033]8;;{url}\033\\{link_text}\033]8;;\033\\"
 
-class BasicTextFormatter:
-    RESET = "\033[0m"
-    TEXT_COLORS = {
-        "black": "\033[30m",
-        "red": "\033[31m",
-        "green": "\033[32m",
-        "yellow": "\033[33m",
-        "blue": "\033[34m",
-        "magenta": "\033[35m",
-        "cyan": "\033[36m",
-        "white": "\033[37m"
-    }
-    TEXT_COLOR_LEVELS = {
-        "light": "\033[1;{}m",  # Light color prefix
-        "dark": "\033[2;{}m"  # Dark color prefix
-    }
-    BACKGROUND_COLORS = {
-        "black": "\033[40m",
-        "red": "\033[41m",
-        "green": "\033[42m",
-        "yellow": "\033[43m",
-        "blue": "\033[44m",
-        "magenta": "\033[45m",
-        "cyan": "\033[46m",
-        "white": "\033[47m"
-    }
-    TEXT_ATTRIBUTES = {
-        "bold": "\033[1m",
-        "italic": "\033[3m",
-        "underline": "\033[4m",
-        "blink": "\033[5m",
-        "reverse": "\033[7m",
-        "strikethrough": "\033[9m"
-    }
+def Send_karaoke_effect(client, text, delay=0.1, ln=True):
+    printed_text = ""
+    for i, char in enumerate(text):
+        # Print already printed text normally
+        Send(client, printed_text + char, ln=False)
 
-    @staticmethod
-    def format_text(text, color=None, color_level=None, background=None, attributes=None, target_text=''):
-        formatted_text = ""
-        start_index = text.find(target_text)
-        end_index = start_index + len(target_text) if start_index != -1 else len(text)
+        # Calculate not yet printed text to dim
+        not_printed_text = text[i + 1:]
+        dimmed_text = ''.join([f"\033[2m{char}\033[0m" for char in not_printed_text])
 
-        if color in BasicTextFormatter.TEXT_COLORS:
-            if color_level in BasicTextFormatter.TEXT_COLOR_LEVELS:
-                color_code = BasicTextFormatter.TEXT_COLORS[color]
-                color_format = BasicTextFormatter.TEXT_COLOR_LEVELS[color_level].format(color_code)
-                formatted_text += color_format
-            else:
-                formatted_text += BasicTextFormatter.TEXT_COLORS[color]
+        # Print dimmed text
+        Send(client, dimmed_text, ln=False)
 
-        if background in BasicTextFormatter.BACKGROUND_COLORS:
-            formatted_text += BasicTextFormatter.BACKGROUND_COLORS[background]
+        # Wait before printing the next character
+        time.sleep(delay)
 
-        if attributes in BasicTextFormatter.TEXT_ATTRIBUTES:
-            formatted_text += BasicTextFormatter.TEXT_ATTRIBUTES[attributes]
+        # Clear the line for the next iteration
+        Send(client, '\r' ,ln=False)
 
-        if target_text == "":
-            formatted_text += text + BasicTextFormatter.RESET
-        else:
-            formatted_text += text[:start_index] + text[start_index:end_index] + BasicTextFormatter.RESET + text[end_index:]
+        # Prepare the updated printed_text for the next iteration
+        printed_text += char
 
-        return formatted_text
+    if ln:
+        Send(client, "") # new line
+

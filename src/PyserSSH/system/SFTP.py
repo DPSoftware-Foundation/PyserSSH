@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -40,17 +40,20 @@ class SSHSFTPHandle(paramiko.SFTPHandle):
         # use the stored filename
         try:
             paramiko.SFTPServer.set_file_attr(self.filename, attr)
-            return paramiko.SFTP_OK
+            return paramiko.sftp.SFTP_OK
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
 
 class SSHSFTPServer(paramiko.SFTPServerInterface):
-    ROOT = None
-    ACCOUNT = None
-    CLIENTHANDELES = None
+    def __init__(self, server: paramiko.ServerInterface, *args, **kwargs):
+        super().__init__(server)
+        self.channel = args[0]
+        self.account = args[1]
+        self.clientH = args[2]
 
     def _realpath(self, path):
-        return self.ROOT + self.canonicalize(path)
+        root = self.account.get_user_sftp_root_path(self.clientH[self.channel.getpeername()]["current_user"])
+        return root + self.canonicalize(path)
 
     def list_folder(self, path):
         path = self._realpath(path)
@@ -80,6 +83,12 @@ class SSHSFTPServer(paramiko.SFTPServerInterface):
             return paramiko.SFTPServer.convert_errno(e.errno)
 
     def open(self, path, flags, attr):
+        # check if write request
+        is_write = (flags & os.O_WRONLY or flags & os.O_RDWR) + (flags & os.O_CREAT) != 0
+
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]) and is_write:
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         path = self._realpath(path)
         try:
             binary_flag = getattr(os, 'O_BINARY', 0)
@@ -120,23 +129,32 @@ class SSHSFTPServer(paramiko.SFTPServerInterface):
         return fobj
 
     def remove(self, path):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         path = self._realpath(path)
         try:
             os.remove(path)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def rename(self, oldpath, newpath):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         oldpath = self._realpath(oldpath)
         newpath = self._realpath(newpath)
         try:
             os.rename(oldpath, newpath)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def mkdir(self, path, attr):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         path = self._realpath(path)
         try:
             os.mkdir(path)
@@ -144,45 +162,58 @@ class SSHSFTPServer(paramiko.SFTPServerInterface):
                 paramiko.SFTPServer.set_file_attr(path, attr)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def rmdir(self, path):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         path = self._realpath(path)
         try:
             os.rmdir(path)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def chattr(self, path, attr):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
         path = self._realpath(path)
         try:
             paramiko.SFTPServer.set_file_attr(path, attr)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def symlink(self, target_path, path):
+        if self.account.get_user_sftp_readonly(self.clientH[self.channel.getpeername()]["current_user"]):
+            return paramiko.sftp.SFTP_PERMISSION_DENIED
+
+        root = self.account.get_user_sftp_root_path(self.clientH[self.channel.getpeername()]["current_user"])
+
         path = self._realpath(path)
         if (len(target_path) > 0) and (target_path[0] == '/'):
             # absolute symlink
-            target_path = os.path.join(self.ROOT, target_path[1:])
+            target_path = os.path.join(root, target_path[1:])
             if target_path[:2] == '//':
                 # bug in os.path.join
                 target_path = target_path[1:]
         else:
             # compute relative to path
             abspath = os.path.join(os.path.dirname(path), target_path)
-            if abspath[:len(self.ROOT)] != self.ROOT:
+            if abspath[:len(root)] != root:
                 # this symlink isn't going to work anyway -- just break it immediately
                 target_path = '<error>'
         try:
             os.symlink(target_path, path)
         except OSError as e:
             return paramiko.SFTPServer.convert_errno(e.errno)
-        return paramiko.SFTP_OK
+        return paramiko.sftp.SFTP_OK
 
     def readlink(self, path):
+        root = self.account.get_user_sftp_root_path(self.clientH[self.channel.getpeername()]["current_user"])
+
         path = self._realpath(path)
         try:
             symlink = os.readlink(path)
@@ -190,8 +221,8 @@ class SSHSFTPServer(paramiko.SFTPServerInterface):
             return paramiko.SFTPServer.convert_errno(e.errno)
 
         if os.path.isabs(symlink):
-            if symlink[:len(self.ROOT)] == self.ROOT:
-                symlink = symlink[len(self.ROOT):]
+            if symlink[:len(root)] == root:
+                symlink = symlink[len(root):]
                 if (len(symlink) == 0) or (symlink[0] != '/'):
                     symlink = '/' + symlink
             else:

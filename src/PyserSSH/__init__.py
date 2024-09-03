@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -37,14 +37,17 @@ right - \x1b[C
 https://en.wikipedia.org/wiki/ANSI_escape_code
 """
 import os
+import ctypes
 import logging
 
 from .interactive import *
 from .server import Server
 from .account import AccountManager
-
-
 from .system.info import system_banner
+
+if os.name == 'nt':
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
 try:
     os.environ["pyserssh_systemmessage"]
@@ -52,25 +55,57 @@ except:
     os.environ["pyserssh_systemmessage"] = "YES"
 
 try:
-    os.environ["pyserssh_enable_damp11113"]
-except:
-    os.environ["pyserssh_enable_damp11113"] = "YES"
-
-try:
     os.environ["pyserssh_log"]
 except:
     os.environ["pyserssh_log"] = "NO"
 
 if os.environ["pyserssh_log"] == "NO":
+    logging.basicConfig(level=logging.CRITICAL)
     logger = logging.getLogger("PyserSSH")
-    logger.disabled = True
+    #logger.disabled = False
 
 if os.environ["pyserssh_systemmessage"] == "YES":
     print(system_banner)
 
-if __name__ == "__main__":
-    stadem = input("Do you want to run demo? (y/n): ")
-    if stadem.upper() in ["Y", "YES"]:
-        from .demo import demo1
-    else:
-        exit()
+# Server Managers
+
+class ServerManager:
+    def __init__(self):
+        self.servers = {}
+
+    def add_server(self, name, server):
+        if name in self.servers:
+            raise ValueError(f"Server with name '{name}' already exists.")
+        self.servers[name] = server
+
+    def remove_server(self, name):
+        if name not in self.servers:
+            raise ValueError(f"No server found with name '{name}'.")
+        del self.servers[name]
+
+    def get_server(self, name):
+        return self.servers.get(name)
+
+    def start_server(self, name, protocol="ssh", *args, **kwargs):
+        server = self.get_server(name)
+        if not server:
+            raise ValueError(f"No server found with name '{name}'.")
+        print(f"Starting server '{name}'...")
+        server.run(*args, **kwargs)
+
+    def stop_server(self, name):
+        server = self.get_server(name)
+        if not server:
+            raise ValueError(f"No server found with name '{name}'.")
+        print(f"Stopping server '{name}'...")
+        server.stop_server()
+
+    def start_all_servers(self, *args, **kwargs):
+        for name, server in self.servers.items():
+            print(f"Starting server '{name}'...")
+            server.run(*args, **kwargs)
+
+    def stop_all_servers(self):
+        for name, server in self.servers.items():
+            print(f"Stopping server '{name}'...")
+            server.stop_server()

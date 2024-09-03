@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -25,14 +25,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-"""
-note
+from ..interactive import Send
 
-ansi cursor arrow
-up - \x1b[A
-down - \x1b[B
-left - \x1b[D
-right - \x1b[C
+def ShowCursor(client, show=True):
+    if show:
+        Send(client, "\033[?25h", ln=False)
+    else:
+        Send(client, "\033[?25l", ln=False)
 
-https://en.wikipedia.org/wiki/ANSI_escape_code
-"""
+def SendBell(client):
+    Send(client, "\x07", ln=False)

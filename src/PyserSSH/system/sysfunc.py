@@ -1,8 +1,8 @@
 """
-PyserSSH - A Scriptable SSH server. For more info visit https://github.com/damp11113/PyserSSH
-Copyright (C) 2023-2024 damp11113 (MIT)
+PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
+Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
 
-Visit https://github.com/damp11113/PyserSSH
+Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
 MIT License
 
@@ -26,10 +26,20 @@ SOFTWARE.
 """
 
 def replace_enter_with_crlf(input_string):
-    if '\n' in input_string:
+    if isinstance(input_string, str):
+        # Replace '\n' with '\r\n' in the string
         input_string = input_string.replace('\n', '\r\n')
-    return input_string
-
+        # Encode the string to bytes
+        return input_string.encode()
+    elif isinstance(input_string, bytes):
+        # Decode bytes to string
+        decoded_string = input_string.decode()
+        # Replace '\n' with '\r\n' in the string
+        modified_string = decoded_string.replace('\n', '\r\n')
+        # Encode the modified string back to bytes
+        return modified_string.encode()
+    else:
+        raise TypeError("Input must be a string or bytes")
 
 def text_centered_screen(text, screen_width, screen_height, spacecharacter=" "):
     screen = []
