@@ -9,11 +9,6 @@ PyserSSH version [1.0](https://github.com/DPSoftware-Foundation/PyserSSH/release
 
 This project is part from [damp11113-library](https://github.com/damp11113/damp11113-library)
 
-## Some small PyserSSH history
-PyserSSH version [1.0](https://github.com/DPSoftware-Foundation/PyserSSH/releases/download/Legacy/PyserSSH10.py) (real filename is "test277.py") was created in 2023/9/3 for experimental purposes only. Because I couldn't find the best ssh server library for python and I started this project only for research. But I have time to develop this research into a real library for use. In software or server.
-
-read full history from [docs](https://damp11113.xyz/PyserSSHDocs/history.html)
-
 # Install
 Install from pypi
 ```bash
