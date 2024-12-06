@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -35,6 +35,13 @@ def are_permissions_met(permission_list, permission_require):
 
 class XHandler:
     def __init__(self, enablehelp=True, showusageonworng=True):
+        """
+       Initializes the command handler with optional settings for help messages and usage.
+
+       Parameters:
+           enablehelp (bool): Whether help messages are enabled.
+           showusageonworng (bool): Whether usage information is shown on wrong usage.
+       """
         self.handlers = {}
         self.categories = {}
         self.enablehelp = enablehelp
@@ -43,6 +50,18 @@ class XHandler:
         self.commandnotfound = None
 
     def command(self, category=None, name=None, aliases=None, permissions: list = None):
+        """
+        Decorator to register a function as a command with optional category, name, aliases, and permissions.
+
+        Parameters:
+            category (str): The category under which the command falls (default: None).
+            name (str): The name of the command (default: None).
+            aliases (list): A list of command aliases (default: None).
+            permissions (list): A list of permissions required to execute the command (default: None).
+
+        Returns:
+            function: The wrapped function.
+        """
         def decorator(func):
             nonlocal name, category
             if name is None:
@@ -87,6 +106,16 @@ class XHandler:
         return decorator
 
     def call(self, client, command_string):
+        """
+        Processes a command string, validates arguments, and calls the corresponding function.
+
+        Parameters:
+            client (object): The client sending the command.
+            command_string (str): The command string to be executed.
+
+        Returns:
+            Any: The result of the command function, or an error message if invalid.
+        """
         tokens = shlex.split(command_string)
         command_name = tokens[0]
         args = tokens[1:]
@@ -102,7 +131,7 @@ class XHandler:
                 command_func = self.handlers[command_name]
                 command_info = self.get_command_info(command_name)
                 if command_info and command_info.get('permissions'):
-                    if not are_permissions_met(self.serverself.accounts.get_permissions(client.get_name()), command_info.get('permissions')):
+                    if not are_permissions_met(self.serverself.accounts.get_permissions(client.get_name()), command_info.get('permissions')) or not self.serverself.accounts.is_user_has_sudo(client.get_name()):
                         Send(client, f"Permission denied. You do not have permission to execute '{command_name}'.")
                         return
 
@@ -172,6 +201,15 @@ class XHandler:
                     return
 
     def get_command_info(self, command_name):
+        """
+        Retrieves information about a specific command, including its description, arguments, and permissions.
+
+        Parameters:
+            command_name (str): The name of the command.
+
+        Returns:
+            dict: A dictionary containing command details such as name, description, args, and permissions.
+        """
         found_command = None
         for category, commands in self.categories.items():
             if command_name in commands:
@@ -197,6 +235,15 @@ class XHandler:
             }
 
     def get_help_command_info(self, command):
+        """
+       Generates a detailed help message for a specific command.
+
+       Parameters:
+           command (str): The name of the command.
+
+       Returns:
+           str: The formatted help message for the command.
+       """
         command_info = self.get_command_info(command)
         aliases = command_info.get('aliases', [])
         help_message = f"{command_info['name']}"
@@ -220,6 +267,12 @@ class XHandler:
         return help_message
 
     def get_help_message(self):
+        """
+        Generates a general help message listing all categories and their associated commands.
+
+        Returns:
+            str: The formatted help message containing all commands and categories.
+        """
         help_message = ""
         for category, commands in self.categories.items():
             help_message += f"{category}:\n"
@@ -231,6 +284,13 @@ class XHandler:
         return help_message
 
     def get_all_commands(self):
+        """
+        Retrieves all registered commands, grouped by category.
+
+        Returns:
+            dict: A dictionary where each key is a category name and the value is a
+                  dictionary of commands within that category.
+        """
         all_commands = {}
         for category, commands in self.categories.items():
             all_commands[category] = commands

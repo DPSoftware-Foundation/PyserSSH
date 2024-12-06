@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -28,9 +28,17 @@ import logging
 
 from ..interactive import Send
 
-logger = logging.getLogger("PyserSSH")
+logger = logging.getLogger("PyserSSH.Ext.ServerUtils")
 
 def kickbyusername(server, username, reason=None):
+    """
+    Kicks a user from the server by their username.
+
+    Args:
+        server (Server): The server object where clients are connected.
+        username (str): The username of the client to be kicked.
+        reason (str, optional): The reason for kicking the user. If None, no reason is provided.
+    """
     for peername, client_handler in list(server.client_handlers.items()):
         if client_handler["current_user"] == username:
             channel = client_handler.get("channel")
@@ -46,6 +54,14 @@ def kickbyusername(server, username, reason=None):
                 logger.info(f"User '{username}' has been kicked by reason {reason}.")
 
 def kickbypeername(server, peername, reason=None):
+    """
+    Kicks a user from the server by their peername.
+
+    Args:
+        server (Server): The server object where clients are connected.
+        peername (str): The peername of the client to be kicked.
+        reason (str, optional): The reason for kicking the user. If None, no reason is provided.
+    """
     client_handler = server.client_handlers.get(peername)
     if client_handler:
         channel = client_handler.get("channel")
@@ -61,6 +77,13 @@ def kickbypeername(server, peername, reason=None):
             logger.info(f"peername '{peername}' has been kicked by reason {reason}.")
 
 def kickall(server, reason=None):
+    """
+    Kicks all users from the server.
+
+    Args:
+        server (Server): The server object where clients are connected.
+        reason (str, optional): The reason for kicking all users. If None, no reason is provided.
+    """
     for peername, client_handler in server.client_handlers.items():
         channel = client_handler.get("channel")
         server._handle_event("disconnected", channel.getpeername(), server.client_handlers[channel.getpeername()]["current_user"])
@@ -78,6 +101,13 @@ def kickall(server, reason=None):
         logger.info(f"All users have been kicked by reason {reason}.")
 
 def broadcast(server, message):
+    """
+    Broadcasts a message to all connected clients.
+
+    Args:
+        server (Server): The server object where clients are connected.
+        message (str): The message to send to all clients.
+    """
     for client_handler in server.client_handlers.values():
         channel = client_handler.get("channel")
         if channel:
@@ -88,6 +118,14 @@ def broadcast(server, message):
                 logger.error(f"Error occurred while broadcasting message: {e}")
 
 def sendto(server, username, message):
+    """
+    Sends a message to a specific user by their username.
+
+    Args:
+        server (Server): The server object where clients are connected.
+        username (str): The username of the client to send the message to.
+        message (str): The message to send to the specified user.
+    """
     for client_handler in server.client_handlers.values():
         if client_handler.get("current_user") == username:
             channel = client_handler.get("channel")

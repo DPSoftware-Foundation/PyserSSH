@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -82,8 +82,11 @@ def Clear(client, oldclear=False, keep=False):
 def Title(client, title):
     Send(client, f"\033]0;{title}\007", ln=False)
 
-def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=True, password=False, passwordmask=b"*", noabort=False, timeout=0):
-    channel = client["channel"]
+def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=True, password=False, passwordmask=b"*", noabort=False, timeout=0, directchannel=False):
+    if directchannel:
+        channel = client
+    else:
+        channel = client["channel"]
 
     channel.send(replace_enter_with_crlf(prompt))
 
@@ -144,6 +147,8 @@ def wait_input(client, prompt="", defaultvalue=None, cursor_scroll=False, echo=T
         channel.sendall(b'\r\n')
         raise
     else:
+        channel.setblocking(False)
+        channel.settimeout(None)
         output = buffer.decode('utf-8')
 
     # Return default value if specified and no input given
@@ -171,9 +176,17 @@ def wait_inputkey(client, prompt="", raw=True, timeout=0):
             if bool(re.compile(b'\x1b\[[0-9;]*[mGK]').search(byte)):
                 pass
 
+            channel.setblocking(False)
+            channel.settimeout(None)
+            if prompt != "":
+                channel.send("\r\n")
             return byte.decode('utf-8') # only regular character
 
         else:
+            channel.setblocking(False)
+            channel.settimeout(None)
+            if prompt != "":
+                channel.send("\r\n")
             return byte
 
     except socket.timeout:
@@ -185,7 +198,8 @@ def wait_inputkey(client, prompt="", raw=True, timeout=0):
     except Exception:
         channel.setblocking(False)
         channel.settimeout(None)
-        channel.send("\r\n")
+        if prompt != "":
+            channel.send("\r\n")
         raise
 
 def wait_inputmouse(client, timeout=0):
@@ -204,6 +218,8 @@ def wait_inputmouse(client, timeout=0):
         if byte.startswith(b'\x1b[M'):
             # Parse mouse event
             if len(byte) < 6 or not byte.startswith(b'\x1b[M'):
+                channel.setblocking(False)
+                channel.settimeout(None)
                 Send(client, "\033[?1000l", ln=False)
                 return None, None, None
 
@@ -212,9 +228,13 @@ def wait_inputmouse(client, timeout=0):
             x = byte[4] - 32
             y = byte[5] - 32
 
+            channel.setblocking(False)
+            channel.settimeout(None)
             Send(client, "\033[?1000l", ln=False)
             return button, x, y
         else:
+            channel.setblocking(False)
+            channel.settimeout(None)
             Send(client, "\033[?1000l", ln=False)
             return byte, None, None
 
@@ -255,9 +275,13 @@ def wait_choose(client, choose, prompt="", timeout=0):
             keyinput = wait_inputkey(client, raw=True)
 
             if keyinput == b'\r':  # Enter key
+                channel.setblocking(False)
+                channel.settimeout(None)
                 Send(client, "\033[K")
                 return chooseindex
             elif keyinput == b'\x03':  # ' ctrl+c' key for cancel
+                channel.setblocking(False)
+                channel.settimeout(None)
                 Send(client, "\033[K")
                 return 0
             elif keyinput == b'\x1b[D':  # Up arrow key

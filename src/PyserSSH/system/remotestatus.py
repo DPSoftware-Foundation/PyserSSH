@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -35,12 +35,12 @@ from datetime import datetime
 import platform
 
 from ..interactive import Send
-from .info import __version__
+from .info import version
 
 if platform.system() == "Windows":
     import ctypes
 
-logger = logging.getLogger("PyserSSH")
+logger = logging.getLogger("PyserSSH.RemoteStatus")
 
 class LASTINPUTINFO(ctypes.Structure):
     _fields_ = [
@@ -221,7 +221,7 @@ Inactive:        0 kB"""
 
             Send(channel, "", directchannel=True)
             Send(channel, "==> /proc/version <==", directchannel=True)
-            Send(channel, f"PyserSSH v{__version__} run on {platform.platform()} {platform.machine()} {platform.architecture()[0]} with python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} {sys.version_info.releaselevel} {platform.python_build()[0]} {platform.python_build()[1]} {platform.python_compiler()} {platform.python_implementation()} {platform.python_revision()}", directchannel=True)
+            Send(channel, f"PyserSSH v{version} run on {platform.platform()} {platform.machine()} {platform.architecture()[0]} with python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} {sys.version_info.releaselevel} {platform.python_build()[0]} {platform.python_build()[1]} {platform.python_compiler()} {platform.python_implementation()} {platform.python_revision()}", directchannel=True)
 
             Send(channel, "", directchannel=True)
             Send(channel, "==> /proc/uptime <==", directchannel=True)

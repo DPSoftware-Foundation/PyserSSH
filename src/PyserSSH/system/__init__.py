@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 

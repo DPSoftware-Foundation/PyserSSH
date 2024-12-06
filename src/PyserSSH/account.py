@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -24,6 +24,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+import logging
 import os
 import pickle
 import time
@@ -31,38 +32,51 @@ import atexit
 import threading
 import hashlib
 
+logger = logging.getLogger("PyserSSH.Account")
+
 class AccountManager:
-    def __init__(self, allow_guest=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autoloadfile="autosave_session.ses"):
+    def __init__(self, allow_guest=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autofile="autosave_session.ses"):
         self.accounts = {}
         self.allow_guest = allow_guest
         self.historylimit = historylimit
         self.autosavedelay = autosavedelay
 
         self.__autosavework = False
+        self.autosave = autosave
         self.__autosaveworknexttime = 0
+        self.__autofile = autofile
 
         if autoload:
-            self.load(autoloadfile)
+            self.load(self.__autofile)
 
-        if autosave:
+        if self.autosave:
+            logger.info("starting autosave")
             self.__autosavethread = threading.Thread(target=self.__autosave, daemon=True)
             self.__autosavethread.start()
             atexit.register(self.__saveexit)
 
     def __autosave(self):
-        self.save("autosave_session.ses")
+        self.save(self.__autofile)
         self.__autosaveworknexttime = time.time() + self.autosavedelay
         self.__autosavework = True
         while self.__autosavework:
             if int(self.__autosaveworknexttime) == int(time.time()):
-                self.save("autosave_session.ses")
+                self.save(self.__autofile)
                 self.__autosaveworknexttime = time.time() + self.autosavedelay
 
             time.sleep(1) # fix cpu load
 
+    def __auto_save(func):
+        def wrapper(self, *args, **kwargs):
+            result = func(self, *args, **kwargs)
+            if self.autosave:
+                self.save(self.__autofile, False)
+            return result
+        return wrapper
+
     def __saveexit(self):
         self.__autosavework = False
-        self.save("autosave_session.ses")
+        self.save(self.__autofile)
         self.__autosavethread.join()
 
     def validate_credentials(self, username, password=None, public_key=None):
@@ -90,6 +104,9 @@ class AccountManager:
     def has_user(self, username):
         return username in self.accounts
 
+    def list_users(self):
+        return list(self.accounts.keys())
+
     def get_allowed_auths(self, username):
         if self.has_user(username) and "allowed_auth" in self.accounts[username]:
             return self.accounts[username]["allowed_auth"]
@@ -100,6 +117,7 @@ class AccountManager:
             return self.accounts[username]["permissions"]
         return []
 
+    @__auto_save
     def set_prompt(self, username, prompt=">"):
         if self.has_user(username):
             self.accounts[username]["prompt"] = prompt
@@ -109,7 +127,8 @@ class AccountManager:
             return self.accounts[username]["prompt"]
         return ">"  # Default prompt if not set for the user
 
-    def add_account(self, username, password=None, public_key=None, permissions:list=None):
+    @__auto_save
+    def add_account(self, username, password=None, public_key=None, permissions:list=None, sudo=False):
         if not self.has_user(username):
             allowedlist = []
             accountkey = {}
@@ -132,34 +151,63 @@ class AccountManager:
             accountkey["allowed_auth"] = ",".join(allowedlist)
 
             self.accounts[username] = accountkey
+
+            if sudo:
+                if self.has_sudo_user():
+                    raise Exception(f"sudo user is exist")
+
+                self.accounts[username]["sudo"] = sudo
         else:
             raise Exception(f"{username} is exist")
 
+    def has_sudo_user(self):
+        return any(account.get("sudo", False) for account in self.accounts.values())
+
+    def is_user_has_sudo(self, username):
+        if self.has_user(username) and "sudo" in self.accounts[username]:
+            return self.accounts[username]["sudo"]
+        return False
+
+    @__auto_save
     def remove_account(self, username):
         if self.has_user(username):
             del self.accounts[username]
 
+    @__auto_save
     def change_password(self, username, new_password):
         if self.has_user(username):
             self.accounts[username]["password"] = new_password
 
+    @__auto_save
     def set_permissions(self, username, new_permissions):
         if self.has_user(username):
             self.accounts[username]["permissions"] = new_permissions
 
-    def save(self, filename="session.ses"):
-        with open(filename, 'wb') as file:
-            pickle.dump(self.accounts, file)
+    def save(self, filename="session.ses", keep_log=True):
+        if keep_log:
+            logger.info(f"saving session to {filename}")
+        try:
+            with open(filename, 'wb') as file:
+                pickle.dump(self.accounts, file)
+
+            if keep_log:
+                logger.info(f"saved session to {filename}")
+        except Exception as e:
+            if keep_log:
+                logger.error(f"save session failed: {e}")
 
     def load(self, filename):
+        logger.info(f"loading session from {filename}")
         try:
             with open(filename, 'rb') as file:
                 self.accounts = pickle.load(file)
+            logger.info(f"loaded session")
         except FileNotFoundError:
-            print("File not found. No accounts loaded.")
+            logger.error("can't load session: file not found.")
         except Exception as e:
-            print(f"An error occurred: {e}. No accounts loaded.")
+            logger.error(f"can't load session: {e}")
 
+    @__auto_save
     def set_user_sftp_allow(self, username, allow=True):
         if self.has_user(username):
             self.accounts[username]["sftp_allow"] = allow
@@ -169,6 +217,7 @@ class AccountManager:
             return self.accounts[username]["sftp_allow"]
         return False
 
+    @__auto_save
     def set_user_sftp_readonly(self, username, readonly=False):
         if self.has_user(username):
             self.accounts[username]["sftp_readonly"] = readonly
@@ -178,6 +227,7 @@ class AccountManager:
             return self.accounts[username]["sftp_readonly"]
         return False
 
+    @__auto_save
     def set_user_sftp_root_path(self, username, path="/"):
         if self.has_user(username):
             if path == "/":
@@ -190,6 +240,7 @@ class AccountManager:
             return self.accounts[username]["sftp_root_path"]
         return os.getcwd()
 
+    @__auto_save
     def set_user_enable_inputsystem(self, username, enable=True):
         if self.has_user(username):
             self.accounts[username]["inputsystem"] = enable
@@ -199,6 +250,7 @@ class AccountManager:
             return self.accounts[username]["inputsystem"]
         return True
 
+    @__auto_save
     def set_user_enable_inputsystem_echo(self, username, echo=True):
         if self.has_user(username):
             self.accounts[username]["inputsystem_echo"] = echo
@@ -208,6 +260,7 @@ class AccountManager:
             return self.accounts[username]["inputsystem_echo"]
         return True
 
+    @__auto_save
     def set_banner(self, username, banner):
         if self.has_user(username):
             self.accounts[username]["banner"] = banner
@@ -222,6 +275,7 @@ class AccountManager:
             return self.accounts[username]["timeout"]
         return None
 
+    @__auto_save
     def set_user_timeout(self, username, timeout=None):
         if self.has_user(username):
             self.accounts[username]["timeout"] = timeout
@@ -231,6 +285,7 @@ class AccountManager:
             return self.accounts[username]["lastlogin"]
         return None
 
+    @__auto_save
     def set_user_last_login(self, username, ip, timelogin=time.time()):
         if self.has_user(username):
             self.accounts[username]["lastlogin"] = {
@@ -238,6 +293,7 @@ class AccountManager:
                 "time": timelogin
             }
 
+    @__auto_save
     def add_history(self, username, command):
         if self.has_user(username):
             if "history" not in self.accounts[username]:
@@ -251,6 +307,7 @@ class AccountManager:
                 if len(self.accounts[username]["history"]) > history_limit:
                     self.accounts[username]["history"] = self.accounts[username]["history"][-history_limit:]
 
+    @__auto_save
     def clear_history(self, username):
         if self.has_user(username):
             self.accounts[username]["history"] = []  # Initialize history list if it doesn't exist

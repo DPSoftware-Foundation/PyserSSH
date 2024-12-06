@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -29,30 +29,52 @@ import time
 from ..interactive import Send
 
 def clickable_url(url, link_text=""):
+    """
+    Creates a clickable URL in a terminal client with optional link text.
+
+    Args:
+        url (str): The URL to be linked.
+        link_text (str, optional): The text to be displayed for the link. Defaults to an empty string, which will display the URL itself.
+
+    Returns:
+        str: A terminal escape sequence that makes the URL clickable with the provided link text.
+    """
     return f"\033]8;;{url}\033\\{link_text}\033]8;;\033\\"
 
 def Send_karaoke_effect(client, text, delay=0.1, ln=True):
+    """
+    Sends a text with a 'karaoke' effect where the text is printed one character at a time,
+    with the remaining text dimmed until it is printed.
+
+    Args:
+        client (Client): The client to send the text to.
+        text (str): The text to be printed with the karaoke effect.
+        delay (float, optional): The delay in seconds between printing each character. Defaults to 0.1.
+        ln (bool, optional): Whether to send a newline after the text is finished. Defaults to True.
+
+    This function simulates a typing effect by printing the text character by character,
+    while dimming the unprinted characters.
+    """
     printed_text = ""
     for i, char in enumerate(text):
-        # Print already printed text normally
+        # Print the already printed text normally
         Send(client, printed_text + char, ln=False)
 
-        # Calculate not yet printed text to dim
+        # Calculate the unprinted text and dim it
         not_printed_text = text[i + 1:]
         dimmed_text = ''.join([f"\033[2m{char}\033[0m" for char in not_printed_text])
 
-        # Print dimmed text
+        # Print the dimmed text for the remaining characters
         Send(client, dimmed_text, ln=False)
 
         # Wait before printing the next character
         time.sleep(delay)
 
-        # Clear the line for the next iteration
-        Send(client, '\r' ,ln=False)
+        # Clear the line to update the text in the next iteration
+        Send(client, '\r', ln=False)
 
-        # Prepare the updated printed_text for the next iteration
+        # Update the printed_text to include the current character
         printed_text += char
 
     if ln:
-        Send(client, "") # new line
-
+        Send(client, "")  # Send a newline after the entire text is printed

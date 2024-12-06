@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -37,15 +37,15 @@ right - \x1b[C
 https://en.wikipedia.org/wiki/ANSI_escape_code
 """
 import os
-import ctypes
 import logging
 
 from .interactive import *
 from .server import Server
 from .account import AccountManager
-from .system.info import system_banner
+from .system.info import system_banner, version
 
 if os.name == 'nt':
+    import ctypes
     kernel32 = ctypes.windll.kernel32
     kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
 
@@ -67,45 +67,10 @@ if os.environ["pyserssh_log"] == "NO":
 if os.environ["pyserssh_systemmessage"] == "YES":
     print(system_banner)
 
-# Server Managers
-
-class ServerManager:
-    def __init__(self):
-        self.servers = {}
-
-    def add_server(self, name, server):
-        if name in self.servers:
-            raise ValueError(f"Server with name '{name}' already exists.")
-        self.servers[name] = server
-
-    def remove_server(self, name):
-        if name not in self.servers:
-            raise ValueError(f"No server found with name '{name}'.")
-        del self.servers[name]
-
-    def get_server(self, name):
-        return self.servers.get(name)
-
-    def start_server(self, name, protocol="ssh", *args, **kwargs):
-        server = self.get_server(name)
-        if not server:
-            raise ValueError(f"No server found with name '{name}'.")
-        print(f"Starting server '{name}'...")
-        server.run(*args, **kwargs)
-
-    def stop_server(self, name):
-        server = self.get_server(name)
-        if not server:
-            raise ValueError(f"No server found with name '{name}'.")
-        print(f"Stopping server '{name}'...")
-        server.stop_server()
-
-    def start_all_servers(self, *args, **kwargs):
-        for name, server in self.servers.items():
-            print(f"Starting server '{name}'...")
-            server.run(*args, **kwargs)
-
-    def stop_all_servers(self):
-        for name, server in self.servers.items():
-            print(f"Stopping server '{name}'...")
-            server.stop_server()
+__author__ = "damp11113"
+__url__ = "https://github.com/DPSoftware-Foundation/PyserSSH"
+__copyright__ = "2023-present"
+__license__ = "MIT"
+__version__ = version
+__department__ = "DPSoftware"
+__organization__ = "DOPFoundation"

@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -37,6 +37,7 @@ def replace_enter_with_crlf(input_string):
         # Replace '\n' with '\r\n' in the string
         modified_string = decoded_string.replace('\n', '\r\n')
         # Encode the modified string back to bytes
+
         return modified_string.encode()
     else:
         raise TypeError("Input must be a string or bytes")

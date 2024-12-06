@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -28,10 +28,23 @@ SOFTWARE.
 from ..interactive import Send
 
 def ShowCursor(client, show=True):
+    """
+    Shows or hides the cursor for a specific client.
+
+    Args:
+        client (Client): The client to show/hide the cursor for.
+        show (bool, optional): A flag to determine whether to show or hide the cursor. Defaults to True (show cursor).
+    """
     if show:
-        Send(client, "\033[?25h", ln=False)
+        Send(client, "\033[?25h", ln=False)  # Show cursor
     else:
-        Send(client, "\033[?25l", ln=False)
+        Send(client, "\033[?25l", ln=False)  # Hide cursor
 
 def SendBell(client):
-    Send(client, "\x07", ln=False)
+    """
+    Sends a bell character (alert) to a client.
+
+    Args:
+        client (Client): The client to send the bell character to.
+    """
+    Send(client, "\x07", ln=False)  # Bell character (alert)

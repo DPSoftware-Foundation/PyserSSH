@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -30,7 +30,21 @@ import re
 from ..interactive import Clear, Send, wait_inputkey
 from ..system.sysfunc import text_centered_screen
 
+
 class TextDialog:
+    """
+    A dialog that displays a simple text message with an optional title.
+
+    Args:
+        client (Client): The client to display the dialog to.
+        content (str, optional): The content to be displayed in the dialog. Defaults to an empty string.
+        title (str, optional): The title of the dialog. Defaults to an empty string.
+
+    Methods:
+        render(): Renders the dialog, displaying the title and content in the center of the screen.
+        waituserenter(): Waits for the user to press the 'enter' key to close the dialog.
+    """
+
     def __init__(self, client, content="", title=""):
         self.client = client
 
@@ -39,11 +53,15 @@ class TextDialog:
         self.content = content
 
     def render(self):
+        """
+        Renders the dialog by displaying the title, content, and waiting for the user's input.
+        """
         Clear(self.client)
         Send(self.client, self.title)
         Send(self.client, "-" * self.windowsize["width"])
 
-        generatedwindow = text_centered_screen(self.content, self.windowsize["width"], self.windowsize["height"]-3, " ")
+        generatedwindow = text_centered_screen(self.content, self.windowsize["width"], self.windowsize["height"] - 3,
+                                               " ")
 
         Send(self.client, generatedwindow)
 
@@ -52,13 +70,32 @@ class TextDialog:
         self.waituserenter()
 
     def waituserenter(self):
+        """
+        Waits for the user to press the 'enter' key to close the dialog.
+        """
         while True:
             if wait_inputkey(self.client, raw=True) == b'\r':
                 Clear(self.client)
                 break
             pass
 
+
 class MenuDialog:
+    """
+    A menu dialog that allows the user to choose from a list of options, with navigation and selection using arrow keys.
+
+    Args:
+        client (Client): The client to display the menu to.
+        choose (list): A list of options to be displayed.
+        title (str, optional): The title of the menu.
+        desc (str, optional): A description to display above the menu options.
+
+    Methods:
+        render(): Renders the menu dialog and waits for user input.
+        _waituserinput(): Handles user input for selecting options or canceling.
+        output(): Returns the selected option index or `None` if canceled.
+    """
+
     def __init__(self, client, choose: list, title="", desc=""):
         self.client = client
 
@@ -67,9 +104,12 @@ class MenuDialog:
         self.desc = desc
         self.contentallindex = len(choose) - 1
         self.selectedindex = 0
-        self.selectstatus = 0 # 0 none 1 selected 2 cancel
+        self.selectstatus = 0  # 0 none, 1 selected, 2 canceled
 
     def render(self):
+        """
+        Renders the menu dialog, displaying the options and allowing the user to navigate and select an option.
+        """
         tempcontentlist = self.choose.copy()
 
         Clear(self.client)
@@ -90,7 +130,8 @@ class MenuDialog:
                 f"{exported}"
             )
 
-        generatedwindow = text_centered_screen(contenttoshow, self.client["windowsize"]["width"], self.client["windowsize"]["height"]-3, " ")
+        generatedwindow = text_centered_screen(contenttoshow, self.client["windowsize"]["width"],
+                                               self.client["windowsize"]["height"] - 3, " ")
 
         Send(self.client, generatedwindow)
 
@@ -99,6 +140,9 @@ class MenuDialog:
         self._waituserinput()
 
     def _waituserinput(self):
+        """
+        Waits for user input and updates the selection based on key presses.
+        """
         keyinput = wait_inputkey(self.client, raw=True)
 
         if keyinput == b'\r':  # Enter key
@@ -124,12 +168,31 @@ class MenuDialog:
             self.render()
 
     def output(self):
+        """
+        Returns the selected option index or `None` if the action was canceled.
+        """
         if self.selectstatus == 2:
             return None
         elif self.selectstatus == 1:
             return self.selectedindex
 
+
 class TextInputDialog:
+    """
+    A text input dialog that allows the user to input text with optional password masking.
+
+    Args:
+        client (Client): The client to display the dialog to.
+        title (str, optional): The title of the input dialog.
+        inputtitle (str, optional): The prompt text for the user input.
+        password (bool, optional): If `True`, the input will be masked as a password. Defaults to `False`.
+
+    Methods:
+        render(): Renders the input dialog, displaying the prompt and capturing user input.
+        _waituserinput(): Handles user input, including text input and special keys.
+        output(): Returns the input text if selected, or `None` if canceled.
+    """
+
     def __init__(self, client, title="", inputtitle="Input Here", password=False):
         self.client = client
 
@@ -137,27 +200,31 @@ class TextInputDialog:
         self.inputtitle = inputtitle
         self.ispassword = password
 
-        self.inputstatus = 0 # 0 none 1 selected 2 cancel
+        self.inputstatus = 0  # 0 none, 1 selected, 2 canceled
         self.buffer = bytearray()
         self.cursor_position = 0
 
     def render(self):
+        """
+        Renders the text input dialog and waits for user input.
+        """
         Clear(self.client)
         Send(self.client, self.title)
         Send(self.client, "-" * self.client["windowsize"]["width"])
 
         if self.ispassword:
             texts = (
-                f"{self.inputtitle}\n\n"
-                "> " + ("*" * len(self.buffer.decode('utf-8')))
+                    f"{self.inputtitle}\n\n"
+                    "> " + ("*" * len(self.buffer.decode('utf-8')))
             )
         else:
             texts = (
-                f"{self.inputtitle}\n\n"
-                "> " + self.buffer.decode('utf-8')
+                    f"{self.inputtitle}\n\n"
+                    "> " + self.buffer.decode('utf-8')
             )
 
-        generatedwindow = text_centered_screen(texts, self.client["windowsize"]["width"], self.client["windowsize"]["height"]-3, " ")
+        generatedwindow = text_centered_screen(texts, self.client["windowsize"]["width"],
+                                               self.client["windowsize"]["height"] - 3, " ")
 
         Send(self.client, generatedwindow)
 
@@ -166,6 +233,9 @@ class TextInputDialog:
         self._waituserinput()
 
     def _waituserinput(self):
+        """
+        Waits for the user to input text or special commands (backspace, cancel, enter).
+        """
         keyinput = wait_inputkey(self.client, raw=True)
 
         if keyinput == b'\r':  # Enter key
@@ -182,7 +252,7 @@ class TextInputDialog:
                     self.buffer = self.buffer[:self.cursor_position - 1] + self.buffer[self.cursor_position:]
                     self.cursor_position -= 1
             elif bool(re.compile(b'\x1b\[[0-9;]*[mGK]').search(keyinput)):
-                pass
+                pass  # Ignore ANSI escape codes
             else:  # Regular character
                 self.buffer = self.buffer[:self.cursor_position] + keyinput + self.buffer[self.cursor_position:]
                 self.cursor_position += 1
@@ -197,6 +267,9 @@ class TextInputDialog:
             self.render()
 
     def output(self):
+        """
+        Returns the input text if the input was selected, or `None` if canceled.
+        """
         if self.inputstatus == 2:
             return None
         elif self.inputstatus == 1:

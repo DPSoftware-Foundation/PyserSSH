@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -38,17 +38,18 @@ from .system.SFTP import SSHSFTPServer
 from .system.sysfunc import replace_enter_with_crlf
 from .system.interface import Sinterface
 from .system.inputsystem import expect
-from .system.info import __version__, system_banner
+from .system.info import version, system_banner
 from .system.clientype import Client as Clientype
+from .system.ProWrapper import SSHTransport, TelnetTransport, ITransport
 
 # paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
 
 sftpclient = ["WinSCP", "Xplore"]
 
-logger = logging.getLogger("PyserSSH")
+logger = logging.getLogger("PyserSSH.Server")
 
 class Server:
-    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=False, system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{__version__}", inspeed=32768, enable_preauth_banner=False, enable_exec_system_command=True, enable_remote_status=False, inputsystem_echo=True):
+    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=False, system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{version}", inspeed=32768, enable_preauth_banner=False, enable_exec_system_command=True, enable_remote_status=False, inputsystem_echo=True):
         """
         system_message set to False to disable welcome message from system
         disable_scroll_with_arrow set to False to enable seek text with arrow (Beta)
@@ -80,13 +81,18 @@ class Server:
         self._event_handlers = {}
         self.client_handlers = {}  # Dictionary to store event handlers for each client
         self.__processmode = None
-        self.__serverisrunning = False
+        self.isrunning = False
         self.__daemon = False
+        self.private_key = ""
+        self.__custom_server_args = ()
+        self.__custom_server = None
+        self.__protocol = "ssh"
 
         if self.enasyscom:
             print("\033[33m!!Warning!! System commands is enable! \033[0m")
 
     def on_user(self, event_name):
+        """Handle event"""
         def decorator(func):
             @wraps(func)
             def wrapper(client, *args, **kwargs):
@@ -98,7 +104,7 @@ class Server:
         return decorator
 
     def handle_client_disconnection(self, handler, chandlers):
-        if not chandlers["channel"].get_transport().is_active():
+        if not chandlers["transport"].is_active():
             if handler:
                 handler(chandlers)
             del self.client_handlers[chandlers["peername"]]
@@ -113,31 +119,28 @@ class Server:
         elif handler:
             return handler(*args, **kwargs)
 
-    def handle_client(self, socketchannel, addr):
-        self._handle_event("pressh", socketchannel)
+    def _handle_client(self, socketchannel, addr):
+        self._handle_event("preserver", socketchannel)
 
-        try:
-            bh_session = paramiko.Transport(socketchannel)
-        except OSError:
-            return
-
-        bh_session.add_server_key(self.private_key)
-
-        bh_session.use_compression(self.compressena)
-
-        bh_session.default_window_size = 2147483647
-        bh_session.packetizer.REKEY_BYTES = pow(2, 40)
-        bh_session.packetizer.REKEY_PACKETS = pow(2, 40)
-
-        bh_session.default_max_packet_size = self.inspeed
-
+        logger.info("Starting session...")
         server = Sinterface(self)
+
+        if not self.__custom_server:
+            if self.__protocol.lower() == "telnet":
+                bh_session = TelnetTransport(socketchannel, server) # Telnet server
+            else:
+                bh_session = SSHTransport(socketchannel, server, self.private_key) # SSH server
+        else:
+            bh_session = self.__custom_server(socketchannel, server, *self.__custom_server_args) # custom server
+
+        bh_session.enable_compression(self.compressena)
+
+        bh_session.max_packet_size(self.inspeed)
+
         try:
-            bh_session.start_server(server=server)
+            bh_session.start_server()
         except:
             return
-
-        logger.info(bh_session.remote_version)
 
         channel = bh_session.accept()
 
@@ -175,8 +178,7 @@ class Server:
             logger.info("saved user data to client handlers")
 
             #if not any(bh_session.remote_version.split("-")[2].startswith(prefix) for prefix in sftpclient):
-            if int(channel.out_window_size) != int(bh_session.default_window_size):
-                logger.info("user is ssh")
+            if not (int(channel.get_out_window_size()) == int(bh_session.get_default_window_size()) and bh_session.get_connection_type() == "SSH"):
                 #timeout for waiting 10 sec
                 for i in range(100):
                     if self.client_handlers[channel.getpeername()]["windowsize"]:
@@ -260,7 +262,6 @@ class Server:
                             time.sleep(0.1)
 
                         self._handle_event("disconnected", self.client_handlers[peername])
-
                     else:
                         self._handle_event("disconnected", self.client_handlers[peername])
                         channel.close()
@@ -271,13 +272,14 @@ class Server:
             bh_session.close()
 
     def stop_server(self):
+        """Stop server"""
         logger.info("Stopping the server...")
         try:
             for client_handler in self.client_handlers.values():
                 channel = client_handler.channel
                 if channel:
                     channel.close()
-            self.__serverisrunning = False
+            self.isrunning = False
             self.server.close()
 
             logger.info("Server stopped.")
@@ -286,42 +288,64 @@ class Server:
 
     def _start_listening_thread(self):
         try:
-            logger.info("Start Listening for connections...")
-            while self.__serverisrunning:
-                client, addr = self.server.accept()
-                if self.__processmode == "thread":
-                    client_thread = threading.Thread(target=self.handle_client, args=(client, addr), daemon=True)
-                    client_thread.start()
-                else:
-                    self.handle_client(client, addr)
-                time.sleep(1)
-        except KeyboardInterrupt:
-            self.stop_server()
+            self.isrunning = True
+            try:
+                logger.info("Listening for connections...")
+                while self.isrunning:
+                    client, addr = self.server.accept()
+                    if self.__processmode == "thread":
+                        logger.info(f"Starting client thread for connection {addr}")
+                        client_thread = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
+                        client_thread.start()
+                    else:
+                        logger.info(f"Starting client for connection {addr}")
+                        self._handle_client(client, addr)
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                self.stop_server()
         except Exception as e:
             logger.error(e)
 
-    def run(self, private_key_path=None, host="0.0.0.0", port=2222, mode="thread", maxuser=0, daemon=False):
-        """mode: single, thread
-        protocol: ssh, telnet
+    def run(self, private_key_path=None, host="0.0.0.0", port=2222, waiting_mode="thread", maxuser=0, daemon=False, listen_thread=True, protocol="ssh", custom_server: ITransport = None, custom_server_args: tuple = None, custom_server_require_socket=True):
+        """mode: single, thread,
+        protocol: ssh, telnet (beta), serial, custom
+        For serial need to set serial port at host (ex. host="com3") and set baudrate at port (ex. port=9600) and change listen_mode to "single".
         """
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
-        self.server.bind((host, port))
+        if protocol.lower() == "ssh":
+            if private_key_path != None:
+                logger.info("Loading private key")
+                self.private_key = paramiko.RSAKey(filename=private_key_path)
+            else:
+                raise ValueError("No private key")
 
-        if private_key_path != None:
-            self.private_key = paramiko.RSAKey(filename=private_key_path)
-        else:
-            raise ValueError("No private key")
-
-        if maxuser == 0:
-            self.server.listen()
-        else:
-            self.server.listen(maxuser)
-
-        self.__processmode = mode.lower()
-        self.__serverisrunning = True
+        self.__processmode = waiting_mode.lower()
         self.__daemon = daemon
 
-        client_thread = threading.Thread(target=self._start_listening_thread, daemon=self.__daemon)
-        client_thread.start()
+        if custom_server:
+            self.__custom_server = custom_server
+            self.__custom_server_args = custom_server_args
 
+        if ((custom_server and protocol.lower() == "custom") and custom_server_require_socket) or protocol.lower() in ["ssh", "telnet"]:
+            logger.info("Creating server...")
+            self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, True)
+            self.server.bind((host, port))
+
+            logger.info("Set listen limit")
+            if maxuser == 0:
+                self.server.listen()
+            else:
+                self.server.listen(maxuser)
+
+            if listen_thread:
+                logger.info("Starting listening in threading")
+                client_thread = threading.Thread(target=self._start_listening_thread, daemon=self.__daemon)
+                client_thread.start()
+            else:
+                print(f"\033[32mServer is running on {host}:{port}\033[0m")
+                self._start_listening_thread()
+        else:
+            client_thread = threading.Thread(target=self._handle_client, args=(None, None), daemon=True)
+            client_thread.start()
+
+        print(f"\033[32mServer is running on {host}:{port}\033[0m")

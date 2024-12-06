@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -31,7 +31,7 @@ import logging
 from .sysfunc import replace_enter_with_crlf
 from .syscom import systemcommand
 
-logger = logging.getLogger("PyserSSH")
+logger = logging.getLogger("PyserSSH.InputSystem")
 
 def expect(self, client, echo=True):
     buffer = bytearray()
@@ -177,7 +177,7 @@ def expect(self, client, echo=True):
 
             try:
                 if self.enasyscom:
-                    sct = systemcommand(client, command)
+                    sct = systemcommand(client, command, self)
                 else:
                     sct = False
 

@@ -1,5 +1,7 @@
 # What is PyserSSH
 
+This library will be **Pyserminal** (Python Server Terminal) as it supports multiple protocols such as ssh telnet rlogin and mores...
+
 PyserSSH is a free and open-source Python library designed to facilitate the creation of customizable SSH terminal servers. Initially developed for research purposes to address the lack of suitable SSH server libraries in Python, PyserSSH provides a flexible and user-friendly solution for implementing SSH servers, making it easier for developers to handle user interactions and command processing.
 
 The project was started by a solo developer to create a more accessible and flexible tool for managing SSH connections and commands. It offers a simplified API compared to other libraries, such as Paramiko, SSHim, and Twisted, which are either outdated or complex for new users.
@@ -32,15 +34,15 @@ pip install git+https://git.damp11113.xyz/DPSoftware-Foundation/PyserSSH.git
 # Quick Example
 This Server use port **2222** for default port
 ```py
-from PyserSSH import Server, Send, AccountManager
+from PyserSSH import Server, AccountManager
 
-useraccount = AccountManager(anyuser=True)
+useraccount = AccountManager(allow_guest=True)
 ssh = Server(useraccount)
 
 @ssh.on_user("command")
 def command(client, command: str):
     if command == "hello":
-        Send(client, "world!")
+        client.send("world!")
         
 ssh.run("your private key file")
 ```

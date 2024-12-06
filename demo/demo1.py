@@ -1,4 +1,8 @@
 import os
+os.environ["damp11113_load_all_module"] = "NO"
+
+from damp11113.utils import TextFormatter
+from damp11113.file import sort_files, allfiles
 import socket
 import time
 import cv2
@@ -6,13 +10,14 @@ import traceback
 import requests
 from bs4 import BeautifulSoup
 import numpy as np
+import logging
 
-#import logging
-#logging.basicConfig(level=logging.DEBUG)
+# Configure logging
+logging.basicConfig(format='[{asctime}] [{levelname}] {name}: {message}', datefmt='%Y-%m-%d %H:%M:%S', style='{', level=logging.DEBUG)
 
 from PyserSSH import Server, AccountManager
-from PyserSSH.interactive import Send, wait_input, wait_inputkey, wait_choose, Clear, wait_inputmouse
-from PyserSSH.system.info import __version__, Flag_TH
+from PyserSSH.interactive import  Send, wait_input, wait_inputkey, wait_choose, Clear, wait_inputmouse
+from PyserSSH.system.info import version, Flag_TH
 from PyserSSH.extensions.processbar import indeterminateStatus, LoadingProgress
 from PyserSSH.extensions.dialog import MenuDialog, TextDialog, TextInputDialog
 from PyserSSH.extensions.moredisplay import clickable_url, Send_karaoke_effect
@@ -20,15 +25,18 @@ from PyserSSH.extensions.moreinteractive import ShowCursor
 from PyserSSH.extensions.remodesk import RemoDesk
 from PyserSSH.extensions.XHandler import XHandler
 from PyserSSH.system.clientype import Client
-from PyserSSH.system.remotestatus import remotestatus
+from PyserSSH.system.RemoteStatus import remotestatus
+from PyserSSH.utils.ServerManager import ServerManager
 
-useraccount = AccountManager(allow_guest=True)
-useraccount.add_account("admin", "")  # create user without password
-useraccount.add_account("test", "test")  # create user without password
-useraccount.add_account("demo")
-useraccount.add_account("remote", "12345", permissions=["remote_desktop"])
-useraccount.set_user_enable_inputsystem_echo("remote", False)
-useraccount.set_user_sftp_allow("admin", True)
+useraccount = AccountManager(allow_guest=True, autoload=True, autosave=True)
+
+if not os.path.isfile("autosave_session.ses"):
+    useraccount.add_account("admin", "", sudo=True)  # create user without password
+    useraccount.add_account("test", "test")  # create user without password
+    useraccount.add_account("demo")
+    useraccount.add_account("remote", "12345", permissions=["remote_desktop"])
+    useraccount.set_user_enable_inputsystem_echo("remote", False)
+    useraccount.set_user_sftp_allow("admin", True)
 
 XH = XHandler()
 ssh = Server(useraccount,
@@ -42,64 +50,7 @@ remotedesktopserver = RemoDesk()
 
 servername = "PyserSSH"
 
-loading = ["PyserSSH", "Extensions"]
-
-class TextFormatter:
-    RESET = "\033[0m"
-    TEXT_COLORS = {
-        "black": "\033[30m",
-        "red": "\033[31m",
-        "green": "\033[32m",
-        "yellow": "\033[33m",
-        "blue": "\033[34m",
-        "magenta": "\033[35m",
-        "cyan": "\033[36m",
-        "white": "\033[37m"
-    }
-    TEXT_COLOR_LEVELS = {
-        "light": "\033[1;{}m",  # Light color prefix
-        "dark": "\033[2;{}m"  # Dark color prefix
-    }
-    BACKGROUND_COLORS = {
-        "black": "\033[40m",
-        "red": "\033[41m",
-        "green": "\033[42m",
-        "yellow": "\033[43m",
-        "blue": "\033[44m",
-        "magenta": "\033[45m",
-        "cyan": "\033[46m",
-        "white": "\033[47m"
-    }
-    TEXT_ATTRIBUTES = {
-        "bold": "\033[1m",
-        "italic": "\033[3m",
-        "underline": "\033[4m",
-        "blink": "\033[5m",
-        "reverse": "\033[7m",
-        "strikethrough": "\033[9m"
-    }
-
-    @staticmethod
-    def format_text_truecolor(text, color=None, background=None, attributes=None, target_text=''):
-        formatted_text = ""
-        start_index = text.find(target_text)
-        end_index = start_index + len(target_text) if start_index != -1 else len(text)
-
-        if color:
-            formatted_text += f"\033[38;2;{color}m"
-
-        if background:
-            formatted_text += f"\033[48;2;{background}m"
-
-        if attributes in TextFormatter.TEXT_ATTRIBUTES:
-            formatted_text += TextFormatter.TEXT_ATTRIBUTES[attributes]
-
-        if target_text == "":
-            formatted_text += text + TextFormatter.RESET
-        else:
-            formatted_text += text[:start_index] + text[start_index:end_index] + TextFormatter.RESET + text[end_index:]
-
-        return formatted_text
+loading = ["PyserSSH", "openRemoDesk", "XHandler", "RemoteStatus"]
 
 @ssh.on_user("pre-shell")
 def guestauth(client):
@@ -185,7 +136,7 @@ def connect(client):
     wm = f"""{Flag_TH()}{'–'*50}
 Hello {client['current_user']},
 
-This is testing server of PyserSSH v{__version__}.
+This is testing server of PyserSSH v{version}.
 
 Visit: {clickable_url("https://damp11113.xyz", "DPCloudev")}
 {'–'*50}"""
@@ -258,9 +209,9 @@ def xh_typing(client: Client, messages, speed = 1):
     Send(client, "")
 
 @XH.command(name="renimtest")
-def xh_renimtest(client: Client, path: str):
+def xh_renimtest(client: Client):
     Clear(client)
-    image = cv2.imread(f"opensource.png", cv2.IMREAD_COLOR)
+    image = cv2.imread("opensource.png", cv2.IMREAD_COLOR)
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     width, height = client['windowsize']["width"] - 5, client['windowsize']["height"] - 5
@@ -458,12 +409,14 @@ def xh_status(client: Client):
 #@ssh.on_user("command")
 #def command(client: Client, command: str):
 
-ssh.run(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'private_key.pem'))
+#ssh.run(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'private_key.pem'))
 
-#manager = ServerManager()
+manager = ServerManager()
 
 # Add servers to the manager
-#manager.add_server("server1", server1)
+manager.add_server("ssh", ssh, os.path.join(os.path.dirname(os.path.realpath(__file__)), 'private_key.pem'))
+manager.add_server("telnet", ssh, "", protocol="telnet")
 
 # Start a specific server
-#manager.start_server("server1", private_key_path="key")
+manager.start_server("ssh")
+manager.start_server("telnet")

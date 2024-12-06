@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -24,7 +24,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-# this file is from DPSoftware Foundation-library
+# this file is from damp11113-library
 
 from itertools import cycle
 import math
@@ -129,17 +129,27 @@ class TextFormatter:
 def insert_string(base, inserted, position=0):
     return base[:position] + inserted + base[position + len(inserted):]
 
-steps1 = ['[   ]', '[-  ]', '[-- ]', '[---]', '[ --]', '[  -]']
-steps2 = ['[   ]', '[-  ]', '[ - ]', '[  -]']
-steps3 = ['[   ]', '[-  ]', '[-- ]', '[ --]', '[  -]', '[   ]', '[  -]', '[ --]', '[-- ]', '[-  ]']
-steps4 = ['[   ]', '[-  ]', '[ - ]', '[  -]', '[   ]', '[  -]', '[ - ]', '[-  ]', '[   ]']
-steps5 = ['[   ]', '[  -]', '[ --]', '[---]', '[-- ]', '[-  ]']
-steps6 = ['[   ]', '[  -]', '[ - ]', '[-  ]']
+class Steps:
+    steps1 = ['[   ]', '[-  ]', '[-- ]', '[---]', '[ --]', '[  -]']
+    steps2 = ['[   ]', '[-  ]', '[ - ]', '[  -]']
+    steps3 = ['[   ]', '[-  ]', '[-- ]', '[ --]', '[  -]', '[   ]', '[  -]', '[ --]', '[-- ]', '[-  ]']
+    steps4 = ['[   ]', '[-  ]', '[ - ]', '[  -]', '[   ]', '[  -]', '[ - ]', '[-  ]', '[   ]']
+    steps5 = ['[   ]', '[  -]', '[ --]', '[---]', '[-- ]', '[-  ]']
+    steps6 = ['[   ]', '[  -]', '[ - ]', '[-  ]']
+    expand_contract = ['[    ]', '[=   ]', '[==  ]', '[=== ]', '[====]', '[ ===]', '[  ==]', '[   =]', '[    ]']
+    rotating_dots = ['.    ', '..   ', '...  ', '.... ', '.....', ' ....', '  ...', '   ..', '    .', '     ']
+    bouncing_ball = ['o     ', ' o    ', '  o   ', '   o  ', '    o ', '     o', '    o ', '   o  ', '  o   ', ' o    ', 'o     ']
+    left_right_dots = ['[    ]', '[.   ]', '[..  ]', '[... ]', '[....]', '[ ...]', '[  ..]', '[   .]', '[    ]']
+    expanding_square = ['[ ]', '[■]', '[■■]', '[■■■]', '[■■■■]', '[■■■]', '[■■]', '[■]', '[ ]']
+    spinner = ['|', '/', '-', '\\', '|', '/', '-', '\\']
+    zigzag = ['/   ', ' /  ', '  / ', '   /', '  / ', ' /  ', '/   ', '\\   ', ' \\  ', '  \\ ', '   \\', '  \\ ', ' \\  ', '\\   ']
+    arrows = ['←  ', '←← ', '←←←', '←← ', '←  ', '→  ', '→→ ', '→→→', '→→ ', '→  ']
+    snake = ['[>    ]', '[=>   ]', '[==>  ]', '[===> ]', '[====>]', '[ ===>]', '[  ==>]', '[   =>]', '[    >]']
+    loading_bar = ['[          ]', '[=         ]', '[==        ]', '[===       ]', '[====      ]', '[=====     ]', '[======    ]', '[=======   ]', '[========  ]', '[========= ]', '[==========]']
 
 class indeterminateStatus:
     def __init__(self, client, desc="Loading...", end="[  OK  ]", timeout=0.1, fail='[FAILED]', steps=None):
         self.client = client
-
         self.desc = desc
         self.end = end
         self.timeout = timeout
@@ -147,13 +157,14 @@ class indeterminateStatus:
 
         self._thread = Thread(target=self._animate, daemon=True)
         if steps is None:
-            self.steps = steps1
+            self.steps = Steps.steps1
         else:
             self.steps = steps
         self.done = False
         self.fail = False
 
     def start(self):
+        """Start progress bar"""
         self._thread.start()
         return self
 
@@ -168,12 +179,14 @@ class indeterminateStatus:
         self.start()
 
     def stop(self):
+        """stop progress"""
         self.done = True
         cols = self.client["windowsize"]["width"]
         Print(self.client['channel'], "\r" + " " * cols, end="")
         Print(self.client['channel'], f"\r{self.end}")
 
     def stopfail(self):
+        """stop progress with error or fail"""
         self.done = True
         self.fail = True
         cols = self.client["windowsize"]["width"]
@@ -234,7 +247,7 @@ class LoadingProgress:
         self._thread = Thread(target=self._animate, daemon=True)
 
         if steps is None:
-            self.steps = steps1
+            self.steps = Steps.steps1
         else:
             self.steps = steps
 
@@ -251,14 +264,17 @@ class LoadingProgress:
         self.currentprint = ""
 
     def start(self):
+        """Start progress bar"""
         self._thread.start()
         self.startime = time.perf_counter()
         return self
 
-    def update(self, i):
+    def update(self, i=1):
+        """update progress"""
         self.current += i
 
-    def updatebuffer(self, i):
+    def updatebuffer(self, i=1):
+        """update buffer progress"""
         self.currentbuffer += i
 
     def _animate(self):
@@ -374,12 +390,14 @@ class LoadingProgress:
         self.start()
 
     def stop(self):
+        """stop progress"""
         self.done = True
         cols = self.client["windowsize"]["width"]
         Print(self.client["channel"], "\r" + " " * cols, end="")
         Print(self.client["channel"], f"\r{self.end}")
 
     def stopfail(self):
+        """stop progress with error or fail"""
         self.done = True
         self.fail = True
         cols = self.client["windowsize"]["width"]

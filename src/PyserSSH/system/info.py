@@ -1,6 +1,6 @@
 """
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
-Copyright (C) 2023-2024 DPSoftware Foundation (MIT)
+Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
 Visit https://github.com/DPSoftware-Foundation/PyserSSH
 
@@ -24,12 +24,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import re
 
-__version__ = "5.0"
+version = "5.1"
 
 system_banner = (
-    f"\033[36mPyserSSH V{__version__} \033[0m"
+    f"\033[36mPyserSSH V{version} \033[0m"
     #"\033[33m!!Warning!! This is Testing Version of PyserSSH \033[0m\n"
     #"\033[35mUse Putty and WinSCP (SFTP) for best experience \033[0m"
 )
@@ -43,7 +42,7 @@ def Flag_TH(returnlist=False):
         f"\033[34m  =====        ==      =====    ====     === ==      =====     =====   ========  \033[0m\n",
         f"\033[37m  ==           ==          ===  ===      ==   ==        ===       ===  ==    ==  \033[0m\n",
         f"\033[31m  ==           ==     ======    =======  ==    ==  ======    ======    ==    ==  \033[0m\n",
-        "                 Made by \033[33mD\033[38;2;255;126;1mP\033[38;2;43;205;150mSoftware\033[0m Foundation from Thailand\n",
+        "                 Made by \033[33mD\033[38;2;255;126;1mP\033[38;2;43;205;150mSoftware\033[0m \033[38;2;204;208;43mFoundation\033[0m from Thailand\n",
         "\n"
     ]
 
