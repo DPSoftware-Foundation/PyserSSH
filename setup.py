@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyserSSH',
-    version='5.1.3',
+    version='5.1.4',
     license='MIT',
     author='DPSoftware Foundation',
     author_email='contact@damp11113.xyz',

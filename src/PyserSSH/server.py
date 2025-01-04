@@ -246,6 +246,8 @@ class Server:
                             isConnect = expect(self, self.client_handlers[channel.getpeername()], echo)
 
                         self._handle_event("disconnected", self.client_handlers[peername])
+                        channel.close()
+                        bh_session.close()
                     except KeyboardInterrupt:
                         self._handle_event("disconnected", self.client_handlers[peername])
                         channel.close()
@@ -256,6 +258,7 @@ class Server:
                     finally:
                         self._handle_event("disconnected", self.client_handlers[peername])
                         channel.close()
+                        bh_session.close()
             else:
                 if self.sftpena:
                     logger.info("user is sftp")
