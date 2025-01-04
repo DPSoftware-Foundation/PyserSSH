@@ -240,8 +240,12 @@ class Server:
                         if echo:
                             channel.send(replace_enter_with_crlf(self.client_handlers[channel.getpeername()]["prompt"] + " "))
 
-                        while True:
-                            expect(self, self.client_handlers[channel.getpeername()], echo)
+                        isConnect = True
+
+                        while isConnect:
+                            isConnect = expect(self, self.client_handlers[channel.getpeername()], echo)
+
+                        self._handle_event("disconnected", self.client_handlers[peername])
                     except KeyboardInterrupt:
                         self._handle_event("disconnected", self.client_handlers[peername])
                         channel.close()

@@ -212,8 +212,7 @@ def expect(self, client, echo=True):
     finally:
         try:
             if not byte:
-                logger.info(f"{peername} is disconnected")
-                self._handle_event("disconnected", self.client_handlers[peername])
+                return False
+            return True
         except:
-            logger.info(f"{peername} is disconnected")
-            self._handle_event("disconnected", self.client_handlers[peername])
+            return False
