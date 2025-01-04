@@ -42,11 +42,12 @@ if platform.system() == "Windows":
 
 logger = logging.getLogger("PyserSSH.RemoteStatus")
 
-class LASTINPUTINFO(ctypes.Structure):
-    _fields_ = [
-        ('cbSize', ctypes.c_uint),
-        ('dwTime', ctypes.c_uint),
-    ]
+if platform.system() == "Windows":
+    class LASTINPUTINFO(ctypes.Structure):
+        _fields_ = [
+            ('cbSize', ctypes.c_uint),
+            ('dwTime', ctypes.c_uint),
+        ]
 
 def get_idle_time():
     if platform.system() == "Windows":

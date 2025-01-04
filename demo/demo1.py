@@ -1,8 +1,6 @@
 import os
 os.environ["damp11113_load_all_module"] = "NO"
 
-from damp11113.utils import TextFormatter
-from damp11113.file import sort_files, allfiles
 import socket
 import time
 import cv2
@@ -27,6 +25,63 @@ from PyserSSH.extensions.XHandler import XHandler
 from PyserSSH.system.clientype import Client
 from PyserSSH.system.RemoteStatus import remotestatus
 from PyserSSH.utils.ServerManager import ServerManager
+
+class TextFormatter:
+    RESET = "\033[0m"
+    TEXT_COLORS = {
+        "black": "\033[30m",
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "yellow": "\033[33m",
+        "blue": "\033[34m",
+        "magenta": "\033[35m",
+        "cyan": "\033[36m",
+        "white": "\033[37m"
+    }
+    TEXT_COLOR_LEVELS = {
+        "light": "\033[1;{}m",  # Light color prefix
+        "dark": "\033[2;{}m"  # Dark color prefix
+    }
+    BACKGROUND_COLORS = {
+        "black": "\033[40m",
+        "red": "\033[41m",
+        "green": "\033[42m",
+        "yellow": "\033[43m",
+        "blue": "\033[44m",
+        "magenta": "\033[45m",
+        "cyan": "\033[46m",
+        "white": "\033[47m"
+    }
+    TEXT_ATTRIBUTES = {
+        "bold": "\033[1m",
+        "italic": "\033[3m",
+        "underline": "\033[4m",
+        "blink": "\033[5m",
+        "reverse": "\033[7m",
+        "strikethrough": "\033[9m"
+    }
+
+    @staticmethod
+    def format_text_truecolor(text, color=None, background=None, attributes=None, target_text=''):
+        formatted_text = ""
+        start_index = text.find(target_text)
+        end_index = start_index + len(target_text) if start_index != -1 else len(text)
+
+        if color:
+            formatted_text += f"\033[38;2;{color}m"
+
+        if background:
+            formatted_text += f"\033[48;2;{background}m"
+
+        if attributes in TextFormatter.TEXT_ATTRIBUTES:
+            formatted_text += TextFormatter.TEXT_ATTRIBUTES[attributes]
+
+        if target_text == "":
+            formatted_text += text + TextFormatter.RESET
+        else:
+            formatted_text += text[:start_index] + text[start_index:end_index] + TextFormatter.RESET + text[end_index:]
+
+        return formatted_text
 
 useraccount = AccountManager(allow_guest=True, autoload=True, autosave=True)
 

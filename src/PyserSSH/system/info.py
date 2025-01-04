@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-version = "5.1"
+version = "5.1.1"
 
 system_banner = (
     f"\033[36mPyserSSH V{version} \033[0m"

@@ -9,4 +9,5 @@ python setup.py sdist
 title uploading to pypi
 twine upload -r pypi dist/*
 
+title done!
 pause
