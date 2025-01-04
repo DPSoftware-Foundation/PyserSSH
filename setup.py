@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyserSSH',
-    version='5.1.1',
+    version='5.1.2',
     license='MIT',
     author='DPSoftware Foundation',
     author_email='contact@damp11113.xyz',
@@ -37,7 +37,8 @@ setup(
             "keyboard",
             "Brotli",
             "pillow",
-            "numpy"
+            "numpy",
+            "opencv-python"
         ],
     }
 )

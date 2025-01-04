@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import serial
+#import serial
 import socket
 import paramiko
 from abc import ABC, abstractmethod
