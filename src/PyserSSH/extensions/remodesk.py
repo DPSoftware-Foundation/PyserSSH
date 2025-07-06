@@ -43,24 +43,27 @@ from ..system.clientype import Client
 logger = logging.getLogger("PyserSSH.Ext.RemoDeskSSH")
 
 class Protocol:
-    def __init__(self, server):
-        self.listclient = []
+    def __init__(self):
+        self.listclient = {}
         self.first = True
         self.running = False
-        self.server = server
         self.buffer = queue.Queue(maxsize=10)
-
+        self.ids = 0
+    
     def _handle_client(self):
         try:
             while self.running:
                 data2send = self.buffer.get()
+                data = data2send[1]
+                clientID = data2send[0]
 
-                for iclient in self.listclient:
-                    try:
-                        iclient[2].sendall(data2send)
-                    except Exception as e:
-                        iclient[2].close()
-                        self.listclient.remove(iclient)
+                try:
+                    self.listclient[clientID]["channel"].sendall(data)
+                except Exception as e:
+                    self.on_client_close(self.listclient[clientID]["client"], clientID)
+
+                    self.listclient[clientID]["channel"].close()
+                    del self.listclient[clientID]
 
                 if not self.listclient:
                     self.running = False
@@ -73,7 +76,7 @@ class Protocol:
         except Exception as e:
             logger.error(f"Error in handle_client: {e}")
 
-    def _handle_client_commands(self, client, id):
+    def _handle_client_commands(self, client, id, cid):
         try:
             while True:
                 client_socket = client.get_subchannel(id)
@@ -89,15 +92,12 @@ class Protocol:
                     command = pickle.loads(command_data)
 
                     if command:
-                        self.handle_commands(command, client)
+                        self.handle_commands(command, client, cid)
 
                 except socket.error:
                     break
         except Exception as e:
             logger.error(f"Error in handle_client_commands: {e}")
-
-    def handle_commands(self, command, client):
-        pass
 
     def _receive_exact(self, socket, n):
         """Helper function to receive exactly n bytes."""
@@ -109,7 +109,16 @@ class Protocol:
             data += packet
         return data
 
-    def init(self, client):
+    def init(self):
+        pass
+
+    def join(self, client: Client, id: int):
+        pass
+
+    def handle_commands(self, command: dict, client: Client, id: int):
+        pass
+
+    def on_client_close(self, client: Client, id: int):
         pass
 
     def handle_new_client(self, client: Client, directchannel=None):
@@ -123,41 +132,136 @@ class Protocol:
                 logger.info("client is not connect in 5 sec")
                 return
 
-        self.listclient.append([client, id, channel])
+        self.listclient[self.ids] = {"client": client, "id": id, "channel": channel}
 
         if self.first:
             self.running = True
             handle_client_thread = threading.Thread(target=self._handle_client, daemon=True)
             handle_client_thread.start()
 
-            self.init(client)
+            self.init()
 
             self.first = False
 
-        command_thread = threading.Thread(target=self._handle_client_commands, args=(client, id), daemon=True)
+        self.join(client, self.ids)
+
+        command_thread = threading.Thread(target=self._handle_client_commands, args=(client, id, self.ids), daemon=True)
         command_thread.start()
 
-class RemoDesk(Protocol):
-    def __init__(self, server=None, quality=50, compression=50, format="jpeg", resolution: set[int, int] = None, activity_threshold=None, second_compress=True):
+        self.ids += 1
+
+class Screen(Protocol):
+    def __init__(self, quality=50, compression=50, cformat="jpeg", resolution: tuple[int, int] = None, second_compress=True):
         """
         Args:
-            server: ssh server
             quality: quality of remote
-            compression: percent of compression 0-100 %
-            format: jpeg, webp, avif
+            compression: percent of compression 0-100 % (second_compress)
+            cformat: jpeg, webp, avif, raw
             resolution: resolution of remote
+            second_compress: use brotli compression (slow but saving bandwidth)
         """
 
-        super().__init__(server)
+        super().__init__()
 
         self.quality = quality
         self.compression = compression
-        self.format = format
+        self.format = cformat
+        self.resolution = resolution
+        self.compress2 = second_compress
+
+    def _imagenc(self, image):
+        if self.format == "webp":
+            retval, buffer = cv2.imencode('.webp', image, [int(cv2.IMWRITE_WEBP_QUALITY), self.quality])
+        elif self.format == "jpeg":
+            retval, buffer = cv2.imencode('.jpeg', image, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
+        elif self.format == "avif":
+            retval, buffer = cv2.imencode('.avif', image, [int(cv2.IMWRITE_AVIF_QUALITY), self.quality])
+        else:
+            raise TypeError(f"{self.format} is not supported")
+
+        if not retval:
+            raise ValueError("image encoding failed.")
+
+        return np.array(buffer).tobytes()
+
+    def _convert_quality(self, quality):
+        brotli_quality = int(quality / 100 * 11)
+        lgwin = int(10 + (quality / 100 * (24 - 10)))
+
+        return brotli_quality, lgwin
+
+    def send(self, toClientID, frame, custom=None):
+        """Send frame to client (opencv)"""
+        # get resolution if resolution is none
+        if not self.resolution:
+            self.resolution = (frame.shape[1], frame.shape[0])
+
+        if self.format == "raw":
+            data = frame.tobytes()
+            israw = True
+        else:
+            data = self._imagenc(frame)
+            israw = False
+
+        if self.compress2:
+            bquality, lgwin = self._convert_quality(self.compression) # support on the fly changing
+            data = brotli.compress(data, quality=bquality, lgwin=lgwin)
+
+        if not custom:
+            data_length = struct.pack('!IIIII', len(data), self.resolution[0], self.resolution[1], 0, israw)
+
+            data2send = data_length + data
+        else:
+            data_length = struct.pack('!IIIII', len(data), self.resolution[0], self.resolution[1], len(custom), israw)
+
+            data2send = data_length + data + custom
+
+        self.buffer.put([toClientID, data2send])
+
+    # forward command
+    def handle_commands(self, command, client, id):
+        self.on_commands(command, client, id)
+
+    def init(self):
+        self.start_init()
+
+    def join(self, client, id):
+        self.on_user_join(client, id)
+
+    def on_client_close(self, client, id):
+        self.on_user_close(client, id)
+
+    # to command
+    def on_commands(self, command: dict, client: Client, id):
+        pass
+
+    def start_init(self):
+        pass
+
+    def on_user_join(self, client: Client, id: int):
+        pass
+
+    def on_user_close(self, client: Client, id: int):
+        pass
+
+class RemoDesk(Screen):
+    def __init__(self, quality=50, compression=50, cformat="jpeg", resolution: tuple[int, int] = None, second_compress=True, activity_threshold=None):
+        """
+        Args:
+            quality: quality of remote
+            compression: percent of compression 0-100 %
+            cformat: jpeg, webp, avif
+            resolution: resolution of remote
+        """
+
+        super().__init__(quality, compression, cformat, resolution, second_compress)
+
         self.resolution = resolution
         self.threshold = activity_threshold
-        self.compress2 = second_compress
+
         self.screensize = ()
         self.previous_frame = None
+        self.listid = []
 
     def _capture_screen(self):
         try:
@@ -195,22 +299,6 @@ class RemoDesk(Protocol):
         else:
             return True
 
-    def _imagenc(self, image):
-        if self.format == "webp":
-            retval, buffer = cv2.imencode('.webp', image, [int(cv2.IMWRITE_WEBP_QUALITY), self.quality])
-        elif self.format == "jpeg":
-            retval, buffer = cv2.imencode('.jpeg', image, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality])
-        elif self.format == "avif":
-            retval, buffer = cv2.imencode('.avif', image, [int(cv2.IMWRITE_AVIF_QUALITY), self.quality])
-
-        else:
-            raise TypeError(f"{self.format} is not supported")
-
-        if not retval:
-            raise ValueError("image encoding failed.")
-
-        return np.array(buffer).tobytes()
-
     def _translate_coordinates(self, x, y):
         if self.resolution:
             translated_x = int(x * (self.screensize[0] / self.resolution[0]))
@@ -219,12 +307,6 @@ class RemoDesk(Protocol):
             translated_x = int(x * (self.screensize[0] / 1920))
             translated_y = int(y * (self.screensize[1] / 1090))
         return translated_x, translated_y
-
-    def _convert_quality(self, quality):
-        brotli_quality = int(quality / 100 * 11)
-        lgwin = int(10 + (quality / 100 * (24 - 10)))
-
-        return brotli_quality, lgwin
 
     def _capture(self):
         while self.running:
@@ -236,19 +318,10 @@ class RemoDesk(Protocol):
                 else:
                     self.resolution = self.screensize
 
-                data = self._imagenc(screen_image)
+                for id in self.listid:
+                    self.send(id, screen_image)
 
-                if self.compress2:
-                    bquality, lgwin = self._convert_quality(self.compression)
-                    data = brotli.compress(data, quality=bquality, lgwin=lgwin)
-
-                data_length = struct.pack('!III', len(data), self.resolution[0], self.resolution[1])
-                data2send = data_length + data
-
-                print(f"Sending data length: {len(data2send)}")
-                self.buffer.put(data2send)
-
-    def handle_commands(self, command, client):
+    def on_commands(self, command, client, id):
         action = command["action"]
         data = command["data"]
 
@@ -289,6 +362,12 @@ class RemoDesk(Protocol):
             else:
                 keyboard.release(key)
 
-    def init(self, client):
+    def start_init(self):
         capture_thread = threading.Thread(target=self._capture, daemon=True)
         capture_thread.start()
+
+    def on_user_join(self, client: Client, id: int):
+        self.listid.append(id)
+
+    def on_user_close(self, client: Client, id: int):
+        self.listid.remove(id)

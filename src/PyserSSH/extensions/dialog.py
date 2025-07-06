@@ -45,12 +45,16 @@ class TextDialog:
         waituserenter(): Waits for the user to press the 'enter' key to close the dialog.
     """
 
-    def __init__(self, client, content="", title=""):
+    def __init__(self, client, content="", title="", exit_key=b'\r'):
+        """
+        if `exit_key` is None, it will default to any key
+        """
         self.client = client
 
         self.windowsize = client["windowsize"]
         self.title = title
         self.content = content
+        self.exit_key = exit_key
 
     def render(self):
         """
@@ -65,7 +69,10 @@ class TextDialog:
 
         Send(self.client, generatedwindow)
 
-        Send(self.client, "Press 'enter' to continue", ln=False)
+        if self.exit_key is None:
+            Send(self.client, "Press any key to close this dialog", ln=False)
+        else:
+            Send(self.client, f"Press '{self.exit_key.decode('utf-8')}' to close this dialog", ln=False)
 
         self.waituserenter()
 
@@ -74,9 +81,15 @@ class TextDialog:
         Waits for the user to press the 'enter' key to close the dialog.
         """
         while True:
-            if wait_inputkey(self.client, raw=True) == b'\r':
+            keyi = wait_inputkey(self.client, raw=True)
+
+            if self.exit_key is None:
                 Clear(self.client)
                 break
+            else:
+                if keyi == self.exit_key:
+                    Clear(self.client)
+                    break
             pass
 
 

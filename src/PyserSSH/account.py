@@ -83,6 +83,10 @@ class AccountManager:
         if self.allow_guest and not self.has_user(username):
             return True
 
+        if not self.has_user(username):
+            logger.error(f"{username} is not exist")
+            return False
+
         allowed_auth_list = str(self.accounts[username].get("allowed_auth", "")).split(",")
 
         # Check password authentication

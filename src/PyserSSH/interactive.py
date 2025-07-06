@@ -65,15 +65,14 @@ def NewSend(client, *astring, ln=True, end=b'\n', sep=b' ', directchannel=False)
                 channel.send(sep)
         channel.send(end)
 
-def Clear(client, oldclear=False, keep=False):
+def Clear(client, oldclear=False, only_current_screen=False):
     sx, sy = client["windowsize"]["width"], client["windowsize"]["height"]
 
     if oldclear:
         for x in range(sy):
             Send(client, '\b \b' * sx, ln=False)  # Send newline after each line
-    elif keep:
-        Send(client, "\033[2J", ln=False)
-        Send(client, "\033[H", ln=False)
+    elif only_current_screen:
+        Send(client, "\033[2J\033[H", ln=False)
     else:
         Send(client, "\033[3J", ln=False)
         Send(client, "\033[1J", ln=False)

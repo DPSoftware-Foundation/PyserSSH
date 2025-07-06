@@ -42,10 +42,6 @@ from .system.info import version, system_banner
 from .system.clientype import Client as Clientype
 from .system.ProWrapper import SSHTransport, TelnetTransport, ITransport
 
-# paramiko.sftp_file.SFTPFile.MAX_REQUEST_SIZE = pow(2, 22)
-
-sftpclient = ["WinSCP", "Xplore"]
-
 logger = logging.getLogger("PyserSSH.Server")
 
 class Server:
@@ -177,7 +173,6 @@ class Server:
 
             logger.info("saved user data to client handlers")
 
-            #if not any(bh_session.remote_version.split("-")[2].startswith(prefix) for prefix in sftpclient):
             if not (int(channel.get_out_window_size()) == int(bh_session.get_default_window_size()) and bh_session.get_connection_type() == "SSH"):
                 #timeout for waiting 10 sec
                 for i in range(100):
