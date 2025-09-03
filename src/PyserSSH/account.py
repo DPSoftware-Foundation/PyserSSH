@@ -151,16 +151,17 @@ class AccountManager:
             if password is None and public_key is None:
                 allowedlist.append("none")
 
-            accountkey["permissions"] = permissions
-            accountkey["allowed_auth"] = ",".join(allowedlist)
-
-            self.accounts[username] = accountkey
-
             if sudo:
                 if self.has_sudo_user():
                     raise Exception(f"sudo user is exist")
 
-                self.accounts[username]["sudo"] = sudo
+                accountkey["sudo"] = sudo
+                permissions.append("root")
+
+            accountkey["permissions"] = permissions
+            accountkey["allowed_auth"] = ",".join(allowedlist)
+
+            self.accounts[username] = accountkey
         else:
             raise Exception(f"{username} is exist")
 

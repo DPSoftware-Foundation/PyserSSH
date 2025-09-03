@@ -36,10 +36,40 @@ logger = logging.getLogger("PyserSSH.InputSystem")
 def expect(self, client, echo=True):
     buffer = bytearray()
     cursor_position = 0
-    outindexall = 0
-    history_index_position = 0  # Initialize history index position outside the loop
+    history_index_position = -1  # Start at -1 (no history selected)
     chan = client["channel"]
-    peername = client["peername"]
+
+    def clear_input_area():
+        """Clear only the input area, preserving the prompt"""
+        # Move cursor back to start of input, then clear to end of line
+        if cursor_position > 0:
+            chan.sendall(f'\x1b[{cursor_position}D'.encode())  # Move cursor to start of input
+        chan.sendall(b'\x1b[K')  # Clear from cursor to end of line
+
+    def redraw_line():
+        """Redraw only the input buffer, not the prompt"""
+        if echo:
+            # Clear the current input area
+            clear_input_area()
+            # Write the buffer content
+            if buffer:
+                chan.sendall(buffer)
+                # Move cursor to correct position
+                chars_after_cursor = len(buffer) - cursor_position
+                if chars_after_cursor > 0:
+                    chan.sendall(f'\x1b[{chars_after_cursor}D'.encode())
+
+    def redraw_from_cursor():
+        """Redraw from cursor position to end of line"""
+        if echo:
+            remaining_text = buffer[cursor_position:]
+            # Clear from cursor to end of line
+            chan.sendall(b'\x1b[K')
+            # Write remaining text
+            chan.sendall(remaining_text)
+            # Move cursor back to correct position
+            if remaining_text:
+                chan.sendall(f'\x1b[{len(remaining_text)}D'.encode())
 
     try:
         while True:
@@ -52,7 +82,6 @@ def expect(self, client, echo=True):
                 raise EOFError()
 
             self._handle_event("rawtype", self.client_handlers[chan.getpeername()], byte)
-
             self.client_handlers[chan.getpeername()]["last_activity_time"] = time.time()
 
             if not byte or byte == b'\x04':
@@ -61,103 +90,121 @@ def expect(self, client, echo=True):
                 pass
             elif byte == b'\t':
                 pass
-            elif byte == b'\x7f' or byte == b'\x08':
+            elif byte == b'\x7f' or byte == b'\x08':  # Backspace
                 if cursor_position > 0:
+                    # Remove character from buffer
                     buffer = buffer[:cursor_position - 1] + buffer[cursor_position:]
                     cursor_position -= 1
-                    outindexall -= 1
-                    if cursor_position != outindexall:
-                        chan.sendall(b"\b \b")
-                        chan.sendall(buffer[cursor_position:])
-                    else:
-                        chan.sendall(b"\b \b")
+
+                    if echo:
+                        # Move cursor back one position
+                        chan.sendall(b'\b')
+                        # Redraw from current position
+                        redraw_from_cursor()
                 else:
+                    # Bell sound for invalid backspace
                     chan.sendall(b"\x07")
-            elif byte == b"\x1b" and chan.recv(1) == b'[':
-                arrow_key = chan.recv(1)
-                if not self.disable_scroll_with_arrow:
-                    if arrow_key == b'C':
-                        # Right arrow key, move cursor right if not at the end
-                        if cursor_position < len(buffer):
-                            chan.sendall(b'\x1b[C')
-                        #    cursor_position += 1
-                            cursor_position = min(len(buffer), cursor_position + 1)
+            elif byte == b"\x1b":  # Escape sequence
+                # Handle arrow keys with timeout to avoid blocking
+                chan.settimeout(0.1)
+                try:
+                    next_byte = chan.recv(1)
+                    if next_byte == b'[':
+                        arrow_key = chan.recv(1)
 
-                    elif arrow_key == b'D':
-                        # Left arrow key, move cursor left if not at the beginning
-                        if cursor_position > 0:
-                            chan.sendall(b'\x1b[D')
-                        #    cursor_position -= 1
-                            cursor_position = max(0, cursor_position - 1)
+                        # Handle left/right arrow keys for cursor movement
+                        if arrow_key == b'C':  # Right arrow
+                            if cursor_position < len(buffer):
+                                chan.sendall(b'\x1b[C')
+                                cursor_position += 1
+                        elif arrow_key == b'D':  # Left arrow
+                            if cursor_position > 0:
+                                chan.sendall(b'\x1b[D')
+                                cursor_position -= 1
 
-                if self.history:
-                    if arrow_key == b'A':
-                        if history_index_position == 0:
-                            command = self.accounts.get_lastcommand(client["current_user"])
-                        else:
-                            command = self.accounts.get_history(client["current_user"], history_index_position)
+                        # Handle up/down arrow keys for history
+                        if self.history:
+                            if arrow_key == b'A':  # Up arrow
+                                history_index_position += 1
+                                try:
+                                    if history_index_position == 0:
+                                        command = self.accounts.get_lastcommand(client["current_user"])
+                                    else:
+                                        command = self.accounts.get_history(client["current_user"],
+                                                                            history_index_position)
 
-                        # Clear the buffer
-                        for i in range(cursor_position):
-                            chan.send(b"\b \b")
+                                    # Clear current input and update buffer with history command
+                                    clear_input_area()
+                                    buffer = bytearray(command.encode('utf-8'))
+                                    cursor_position = len(buffer)
+                                    if echo and buffer:
+                                        chan.sendall(buffer)
+                                except:
+                                    # If no more history, stay at current position
+                                    history_index_position -= 1
 
-                        # Update buffer and cursor position with the new command
-                        buffer = bytearray(command.encode('utf-8'))
-                        cursor_position = len(buffer)
-                        outindexall = cursor_position
+                            elif arrow_key == b'B':  # Down arrow
+                                if history_index_position > -1:
+                                    history_index_position -= 1
 
-                        # Print the updated buffer
-                        chan.sendall(buffer)
+                                    if history_index_position == -1:
+                                        # Clear buffer (no history selected)
+                                        clear_input_area()
+                                        buffer.clear()
+                                        cursor_position = 0
+                                    else:
+                                        try:
+                                            if history_index_position == 0:
+                                                command = self.accounts.get_lastcommand(client["current_user"])
+                                            else:
+                                                command = self.accounts.get_history(client["current_user"],
+                                                                                    history_index_position)
 
-                        history_index_position += 1
-                    elif arrow_key == b'B':
-                        if history_index_position != -1:
-                            if history_index_position == 0:
-                                command = self.accounts.get_lastcommand(client["current_user"])
-                            else:
-                                command = self.accounts.get_history(client["current_user"], history_index_position)
-
-                            # Clear the buffer
-                            for i in range(cursor_position):
-                                chan.send(b"\b \b")
-
-                            # Update buffer and cursor position with the new command
-                            buffer = bytearray(command.encode('utf-8'))
-                            cursor_position = len(buffer)
-                            outindexall = cursor_position
-
-                            # Print the updated buffer
-                            chan.sendall(buffer)
-                        else:
-                            history_index_position = 0
-                            for i in range(cursor_position):
-                                chan.send(b"\b \b")
-
-                            buffer.clear()
-                            cursor_position = 0
-                            outindexall = 0
-
-                        history_index_position -= 1
+                                            clear_input_area()
+                                            buffer = bytearray(command.encode('utf-8'))
+                                            cursor_position = len(buffer)
+                                            if echo and buffer:
+                                                chan.sendall(buffer)
+                                        except:
+                                            # If history access fails, clear buffer
+                                            clear_input_area()
+                                            buffer.clear()
+                                            cursor_position = 0
+                                            history_index_position = -1
+                    else:
+                        # Not an arrow key sequence, treat as regular input
+                        buffer = buffer[:cursor_position] + b'\x1b' + next_byte + buffer[cursor_position:]
+                        cursor_position += 2
+                        if echo:
+                            chan.sendall(b'\x1b' + next_byte)
+                            redraw_from_cursor()
+                except socket.timeout:
+                    # Just escape key, treat as regular character
+                    buffer = buffer[:cursor_position] + byte + buffer[cursor_position:]
+                    cursor_position += 1
+                    if echo:
+                        chan.sendall(byte)
+                        redraw_from_cursor()
+                finally:
+                    chan.settimeout(None)
 
             elif byte in (b'\r', b'\n'):
                 break
             else:
-                history_index_position = -1
+                # Regular character input
+                history_index_position = -1  # Reset history position
 
                 self._handle_event("type", self.client_handlers[chan.getpeername()], byte)
-                if echo:
-                    if outindexall != cursor_position:
-                        chan.sendall(b" ")
-                        chan.sendall(b'\033[s')
-                        chan.sendall(byte + buffer[cursor_position:])
-                        chan.sendall(b'\033[u')
-                    else:
-                        chan.sendall(byte)
 
-                #print(buffer[:cursor_position], byte, buffer[cursor_position:])
+                # Insert character at cursor position
                 buffer = buffer[:cursor_position] + byte + buffer[cursor_position:]
                 cursor_position += 1
-                outindexall += 1
+
+                if echo:
+                    chan.sendall(byte)
+                    # If we're not at the end, redraw the rest of the line
+                    if cursor_position < len(buffer):
+                        redraw_from_cursor()
 
             client["inputbuffer"] = buffer
 

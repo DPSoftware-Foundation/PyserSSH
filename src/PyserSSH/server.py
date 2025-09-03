@@ -45,10 +45,9 @@ from .system.ProWrapper import SSHTransport, TelnetTransport, ITransport
 logger = logging.getLogger("PyserSSH.Server")
 
 class Server:
-    def __init__(self, accounts, system_message=True, disable_scroll_with_arrow=True, sftp=False, system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{version}", inspeed=32768, enable_preauth_banner=False, enable_exec_system_command=True, enable_remote_status=False, inputsystem_echo=True):
+    def __init__(self, accounts, system_message=True, sftp=False, system_commands=True, compression=True, usexternalauth=False, history=True, inputsystem=True, XHandler=None, title=f"PyserSSH v{version}", max_bandwidth=65536, enable_preauth_banner=False, enable_exec_system_command=True, enable_remote_status=False, inputsystem_echo=True):
         """
         system_message set to False to disable welcome message from system
-        disable_scroll_with_arrow set to False to enable seek text with arrow (Beta)
         sftp set to True to enable SFTP server
         system_commands set to False to disable system commmands
         compression set to False to disable SSH compression
@@ -56,7 +55,6 @@ class Server:
         """
         self.sysmess = system_message
         self.accounts = accounts
-        self.disable_scroll_with_arrow = disable_scroll_with_arrow
         self.sftpena = sftp
         self.enasyscom = system_commands
         self.compressena = compression
@@ -65,7 +63,7 @@ class Server:
         self.enainputsystem = inputsystem
         self.XHandler = XHandler
         self.title = title
-        self.inspeed = inspeed
+        self.max_bandwidth = max_bandwidth
         self.enaloginbanner = enable_preauth_banner
         self.enasysexec = enable_exec_system_command
         self.enaremostatus = enable_remote_status
@@ -131,7 +129,7 @@ class Server:
 
         bh_session.enable_compression(self.compressena)
 
-        bh_session.max_packet_size(self.inspeed)
+        bh_session.max_packet_size(self.max_bandwidth)
 
         try:
             bh_session.start_server()

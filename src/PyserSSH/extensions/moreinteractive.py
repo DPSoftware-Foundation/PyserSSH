@@ -26,6 +26,8 @@ SOFTWARE.
 """
 
 from ..interactive import Send
+from ..system.clientype import Client
+
 
 def ShowCursor(client, show=True):
     """

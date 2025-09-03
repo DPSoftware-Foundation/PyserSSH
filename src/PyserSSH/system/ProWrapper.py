@@ -29,7 +29,7 @@ SOFTWARE.
 import socket
 import paramiko
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Union, Literal
 
 from .interface import Sinterface
 from ..interactive import Send, wait_input
@@ -176,7 +176,6 @@ class ITransport(ABC):
         """
         pass
 
-
 class IChannel(ABC):
     @abstractmethod
     def send(self, s: Union[bytes, bytearray]) -> None:
@@ -268,6 +267,13 @@ class IChannel(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_specific_protocol_channel(self) -> Union[socket.socket, paramiko.Channel]:
+        """
+        Get real channel from protocol you are using.
+        """
+        pass
+
 #--------------------------------------------------------------------------------------------
 
 class SSHTransport(ITransport):
@@ -285,6 +291,7 @@ class SSHTransport(ITransport):
 
     def max_packet_size(self, size):
         self.bh_session.default_max_packet_size = size
+        self.bh_session.default_window_size = size * 2
 
     def start_server(self):
         self.bh_session.start_server(server=self.interface)
@@ -352,6 +359,9 @@ class SSHChannel(IChannel):
 
     def get_out_window_size(self):
         return self.channel.out_window_size
+
+    def get_specific_protocol_channel(self):
+        return self.channel
 
 #--------------------------------------------------------------------------------------------
 
@@ -493,3 +503,6 @@ class TelnetChannel(IChannel):
 
     def get_out_window_size(self) -> int:
         return 0
+
+    def get_specific_protocol_channel(self):
+        return self.channel

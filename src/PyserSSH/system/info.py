@@ -25,7 +25,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-version = "5.2"
+version = "5.3"
 
 system_banner = (
     f"\033[36mPyserSSH V{version} \033[0m"
@@ -34,8 +34,6 @@ system_banner = (
 )
 
 def Flag_TH(returnlist=False):
-
-
     Flags = [
         "\n",
         f"\033[31m  =======   ==    ==   ======   =======  ======     ======    ======   ==    ==  \033[0m\n",

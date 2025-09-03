@@ -30,7 +30,6 @@ import re
 from ..interactive import Clear, Send, wait_inputkey
 from ..system.sysfunc import text_centered_screen
 
-
 class TextDialog:
     """
     A dialog that displays a simple text message with an optional title.

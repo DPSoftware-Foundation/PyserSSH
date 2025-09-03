@@ -272,6 +272,15 @@ class Client:
         Args:
             data (str): The data to send.
         """
+        Send(self.channel, data, directchannel=True, ln=False)
+
+    def sendln(self, data):
+        """
+        Sends data over the main communication channel.
+
+        Args:
+            data (str): The data to send.
+        """
         Send(self.channel, data, directchannel=True)
 
     def __str__(self):
