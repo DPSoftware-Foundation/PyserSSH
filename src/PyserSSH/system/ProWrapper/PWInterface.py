@@ -25,14 +25,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-#import serial
 import socket
 import paramiko
 from abc import ABC, abstractmethod
-from typing import Union, Literal
+from typing import Union
 
-from .interface import Sinterface
-from ..interactive import Send, wait_input
+from PyserSSH.system.interface import Sinterface
+
 
 class ITransport(ABC):
     @abstractmethod
@@ -176,6 +175,10 @@ class ITransport(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_interface(self) -> "Sinterface":
+        pass
+
 class IChannel(ABC):
     @abstractmethod
     def send(self, s: Union[bytes, bytearray]) -> None:
@@ -273,236 +276,3 @@ class IChannel(ABC):
         Get real channel from protocol you are using.
         """
         pass
-
-#--------------------------------------------------------------------------------------------
-
-class SSHTransport(ITransport):
-    def __init__(self, socketchannel: socket.socket, interface: Sinterface, key):
-        self.socket: socket.socket = socketchannel
-        self.interface: Sinterface = interface
-        self.key = key
-
-        self.bh_session = paramiko.Transport(self.socket)
-        self.bh_session.add_server_key(self.key)
-        self.bh_session.default_window_size = 2147483647
-
-    def enable_compression(self, enable):
-        self.bh_session.use_compression(enable)
-
-    def max_packet_size(self, size):
-        self.bh_session.default_max_packet_size = size
-        self.bh_session.default_window_size = size * 2
-
-    def start_server(self):
-        self.bh_session.start_server(server=self.interface)
-
-    def accept(self, timeout=None):
-        return SSHChannel(self.bh_session.accept(timeout))
-
-    def set_subsystem_handler(self, name, handler, *args, **kwargs):
-        self.bh_session.set_subsystem_handler(name, handler, *args, **kwargs)
-
-    def close(self):
-        self.bh_session.close()
-
-    def is_authenticated(self):
-        return self.bh_session.is_authenticated()
-
-    def getpeername(self):
-        return self.bh_session.getpeername()
-
-    def get_username(self):
-        return self.bh_session.get_username()
-
-    def is_active(self):
-        return self.bh_session.is_active()
-
-    def get_auth_method(self):
-        return self.bh_session.auth_handler.auth_method
-
-    def set_username(self, username):
-        self.bh_session.auth_handler.username = username
-
-    def get_default_window_size(self):
-        return self.bh_session.default_window_size
-
-    def get_connection_type(self):
-        return "SSH"
-
-class SSHChannel(IChannel):
-    def __init__(self, channel: paramiko.Channel):
-        self.channel: paramiko.Channel = channel
-
-    def send(self, s):
-        self.channel.send(s)
-
-    def sendall(self, s):
-        self.channel.sendall(s)
-
-    def getpeername(self):
-        return self.channel.getpeername()
-
-    def settimeout(self, timeout):
-        self.channel.settimeout(timeout)
-
-    def setblocking(self, blocking):
-        self.channel.setblocking(blocking)
-
-    def recv(self, nbytes):
-        return self.channel.recv(nbytes)
-
-    def get_id(self):
-        return self.channel.get_id()
-
-    def close(self):
-        self.channel.close()
-
-    def get_out_window_size(self):
-        return self.channel.out_window_size
-
-    def get_specific_protocol_channel(self):
-        return self.channel
-
-#--------------------------------------------------------------------------------------------
-
-# Telnet command and option codes
-IAC = 255
-DO = 253
-WILL = 251
-TTYPE = 24
-ECHO = 1
-SGA = 3  # Suppress Go Ahead
-
-def send_telnet_command(sock, command, option):
-    sock.send(bytes([IAC, command, option]))
-
-class TelnetTransport(ITransport):
-    def __init__(self, socketchannel: socket.socket, interface: Sinterface):
-        self.socket: socket.socket = socketchannel
-        self.interface: Sinterface = interface
-        self.username = None
-        self.isactive = True
-        self.isauth = False
-        self.auth_method = None
-
-    def enable_compression(self, enable):
-        pass
-
-    def max_packet_size(self, size):
-        pass
-
-    def start_server(self):
-        pass
-
-    def set_subsystem_handler(self, name: str, handler: callable, *args: any, **kwargs: any) -> None:
-        pass
-
-    def negotiate_options(self):
-        # Negotiating TTYPE (Terminal Type), ECHO, and SGA (Suppress Go Ahead)
-        send_telnet_command(self.socket, DO, TTYPE)
-        send_telnet_command(self.socket, WILL, ECHO)
-        send_telnet_command(self.socket, WILL, SGA)
-
-    def accept(self, timeout=None):
-        # Perform Telnet negotiation
-        self.negotiate_options()
-
-        # Simple authentication prompt
-        username = wait_input(self.socket, "Login as: ", directchannel=True)
-
-        try:
-            allowauth = self.interface.get_allowed_auths(username).split(',')
-        except:
-            allowauth = self.interface.get_allowed_auths(username)
-
-        if allowauth[0] == "password":
-            password = wait_input(self.socket, "Password", password=True, directchannel=True)
-            result = self.interface.check_auth_password(username, password)
-
-            if result == 0:
-                self.isauth = True
-                self.username = username
-                self.auth_method = "password"
-                return TelnetChannel(self.socket)
-            else:
-                Send(self.socket, "Access denied", directchannel=True)
-                self.close()
-        elif allowauth[0] == "public_key":
-            Send(self.socket, "Public key isn't supported for telnet", directchannel=True)
-            self.close()
-        elif allowauth[0] == "none":
-            result = self.interface.check_auth_none(username)
-
-            if result == 0:
-                self.username = username
-                self.isauth = True
-                self.auth_method = "none"
-                return TelnetChannel(self.socket)
-            else:
-                Send(self.socket, "Access denied", directchannel=True)
-                self.close()
-        else:
-            Send(self.socket, "Access denied", directchannel=True)
-
-    def close(self):
-        self.isactive = False
-        self.socket.close()
-
-    def is_authenticated(self):
-        return self.isauth
-
-    def getpeername(self):
-        return self.socket.getpeername()
-
-    def get_username(self):
-        return self.username
-
-    def is_active(self):
-        return self.isactive
-
-    def get_auth_method(self):
-        return self.auth_method
-
-    def set_username(self, username):
-        self.username = username
-
-    def get_default_window_size(self):
-        return 0
-
-    def get_connection_type(self):
-        return "Telnet"
-
-
-class TelnetChannel(IChannel):
-    def __init__(self, channel: socket.socket):
-        self.channel: socket.socket = channel
-
-    def send(self, s):
-        self.channel.send(s)
-
-    def sendall(self, s):
-        self.channel.sendall(s)
-
-    def getpeername(self):
-        return self.channel.getpeername()
-
-    def settimeout(self, timeout):
-        self.channel.settimeout(timeout)
-
-    def setblocking(self, blocking):
-        self.channel.setblocking(blocking)
-
-    def recv(self, nbytes):
-        return self.channel.recv(nbytes)
-
-    def get_id(self):
-        return 0
-
-    def close(self) -> None:
-        return self.channel.close()
-
-    def get_out_window_size(self) -> int:
-        return 0
-
-    def get_specific_protocol_channel(self):
-        return self.channel

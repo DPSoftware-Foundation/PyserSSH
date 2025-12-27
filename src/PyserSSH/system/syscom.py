@@ -25,8 +25,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 import shlex
+import time
+from datetime import datetime
 
 from ..interactive import Send, Clear, Title, wait_choose
+from ..system.info import version
 
 def system_account_command(client, accounts, action):
     banner = "accman adduser <username> <password>\naccman deluser <username>\naccman passwd <username> <new password>\naccman list"
@@ -59,8 +62,43 @@ def system_account_command(client, accounts, action):
         Send(client, banner)
 
 def systemcommand(client, command, serverself):
-    if command == "whoami":
-        Send(client, client["current_user"])
+    if command.startswith("whoami"):
+        client.sendln(client["current_user"])
+        return True
+    elif command.startswith("uname"):
+        client.sendln(f"PyserSSH {version}")
+        return True
+    elif command.startswith("uptime"):
+        uptime_seconds = time.time() - serverself.startuptime
+        hours, remainder = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        Send(client, f"up {int(hours)}:{int(minutes):02d}, {len(serverself.client_threads)} users")
+        return True
+    elif command.startswith("hostname"):
+        Send(client, serverself.hostname)
+        return True
+    elif command.startswith("history"):
+        if serverself.history:
+            history = serverself.accounts.get_history(client["current_user"], 0, getall=True)
+            for idx, cmd in enumerate(history, 1):
+                Send(client, f"{idx}  {cmd}")
+        return True
+    elif command.startswith("echo"):
+        args = shlex.split(command)
+        Send(client, " ".join(args[1:]))
+        return True
+    elif command.startswith("who"):
+        Send(client, "USER     TTY      LOGIN@   IDLE")
+        for peer in serverself.client_threads.keys():
+            Send(client, f"{peer[0]}  pts/0    00:00    0:00")
+        return True
+    elif command.startswith("date"):
+        Send(client, datetime.now().strftime("%a %b %d %H:%M:%S %Z %Y"))
+        return True
+    elif command.startswith("helpsyscom"):
+        Send(client, "Available commands:")
+        Send(client, "whoami, uname, hostname, uptime, who, history")
+        Send(client, "echo, date, clear, exit, title, accman (root)")
         return True
     elif command.startswith("title"):
         args = shlex.split(command)
@@ -74,10 +112,10 @@ def systemcommand(client, command, serverself):
         else:
             Send(client, "accman: Permission denied.")
         return True
-    elif command == "exit":
+    elif command.startswith("exit"):
         client["channel"].close()
         return True
-    elif command == "clear":
+    elif command.startswith("clear"):
         Clear(client)
         return True
     else:

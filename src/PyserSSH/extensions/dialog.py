@@ -29,6 +29,7 @@ import re
 
 from ..interactive import Clear, Send, wait_inputkey
 from ..system.sysfunc import text_centered_screen
+from .moredisplay import alternate
 
 class TextDialog:
     """
@@ -55,11 +56,19 @@ class TextDialog:
         self.content = content
         self.exit_key = exit_key
 
+        self.is_init = False
+
     def render(self):
         """
         Renders the dialog by displaying the title, content, and waiting for the user's input.
         """
-        Clear(self.client)
+        if not self.is_init:
+            alternate.enter(self.client)
+
+            self.is_init = True
+        else:
+            alternate.clear(self.client)
+
         Send(self.client, self.title)
         Send(self.client, "-" * self.windowsize["width"])
 
@@ -83,14 +92,13 @@ class TextDialog:
             keyi = wait_inputkey(self.client, raw=True)
 
             if self.exit_key is None:
-                Clear(self.client)
+                alternate.exit(self.client)
                 break
             else:
                 if keyi == self.exit_key:
-                    Clear(self.client)
+                    alternate.exit(self.client)
                     break
             pass
-
 
 class MenuDialog:
     """
@@ -118,13 +126,21 @@ class MenuDialog:
         self.selectedindex = 0
         self.selectstatus = 0  # 0 none, 1 selected, 2 canceled
 
+        self.is_init = False
+
     def render(self):
         """
         Renders the menu dialog, displaying the options and allowing the user to navigate and select an option.
         """
         tempcontentlist = self.choose.copy()
 
-        Clear(self.client)
+        if not self.is_init:
+            alternate.enter(self.client)
+
+            self.is_init = True
+        else:
+            alternate.clear(self.client)
+
         Send(self.client, self.title)
         Send(self.client, "-" * self.client["windowsize"]["width"])
 
@@ -158,10 +174,10 @@ class MenuDialog:
         keyinput = wait_inputkey(self.client, raw=True)
 
         if keyinput == b'\r':  # Enter key
-            Clear(self.client)
+            alternate.exit(self.client)
             self.selectstatus = 1
         elif keyinput == b'c':  # 'c' key for cancel
-            Clear(self.client)
+            alternate.exit(self.client)
             self.selectstatus = 2
         elif keyinput == b'\x1b[A':  # Up arrow key
             self.selectedindex -= 1
@@ -216,11 +232,19 @@ class TextInputDialog:
         self.buffer = bytearray()
         self.cursor_position = 0
 
+        self.is_init = False
+
     def render(self):
         """
         Renders the text input dialog and waits for user input.
         """
-        Clear(self.client)
+        if not self.is_init:
+            alternate.enter(self.client)
+
+            self.is_init = True
+        else:
+            alternate.clear(self.client)
+
         Send(self.client, self.title)
         Send(self.client, "-" * self.client["windowsize"]["width"])
 
@@ -251,10 +275,10 @@ class TextInputDialog:
         keyinput = wait_inputkey(self.client, raw=True)
 
         if keyinput == b'\r':  # Enter key
-            Clear(self.client)
+            alternate.exit(self.client)
             self.inputstatus = 1
         elif keyinput == b'\x03':  # 'ctrl + c' key for cancel
-            Clear(self.client)
+            alternate.exit(self.client)
             self.inputstatus = 2
 
         try:

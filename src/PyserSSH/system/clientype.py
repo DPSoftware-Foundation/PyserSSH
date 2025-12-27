@@ -27,10 +27,10 @@ SOFTWARE.
 import time
 
 from ..interactive import Send
-from .ProWrapper import IChannel, ITransport
+from .ProWrapper.PWInterface import IChannel, ITransport
 
 class Client:
-    def __init__(self, channel, transport, peername):
+    def __init__(self, channel, transport, peername, server):
         """
         Initializes a new client instance.
 
@@ -42,6 +42,7 @@ class Client:
         self.current_user = None
         self.transport: ITransport = transport
         self.channel: IChannel = channel
+        self.server = server
         self.subchannel = {}
         self.connecttype = None
         self.last_activity_time = None
@@ -58,6 +59,9 @@ class Client:
         self.last_error = None
         self.last_command = None
         self.isexeccommandrunning = False
+        self.is_active = False
+        self.session_type = None
+        self.key_interrupted = False
 
     def get_id(self):
         """
@@ -263,7 +267,11 @@ class Client:
         """
         Closes the main communication channel for the client.
         """
+        self.is_active = False
         self.channel.close()
+        for sub in self.subchannel.values():
+            sub.close()
+        self.transport.close()
 
     def send(self, data):
         """

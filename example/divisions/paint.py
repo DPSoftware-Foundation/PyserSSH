@@ -244,6 +244,6 @@ def paint(client: Client):
     while running:
         adv_input.tick()
 
-    Clear(client).screen()
+    Clear(client)
     ShowCursor(client, True)
     client.sendln("Paint session ended.")

@@ -37,11 +37,10 @@ right - \x1b[C
 https://en.wikipedia.org/wiki/ANSI_escape_code
 """
 import os
-import logging
 
 from .interactive import *
 from .server import Server
-from .account import AccountManager
+from .account.localAM import LocalAccountManager
 from .system.info import system_banner, version
 
 if os.name == 'nt':
@@ -53,16 +52,6 @@ try:
     os.environ["pyserssh_systemmessage"]
 except:
     os.environ["pyserssh_systemmessage"] = "YES"
-
-try:
-    os.environ["pyserssh_log"]
-except:
-    os.environ["pyserssh_log"] = "NO"
-
-if os.environ["pyserssh_log"] == "NO":
-    logging.basicConfig(level=logging.CRITICAL)
-    logger = logging.getLogger("PyserSSH")
-    #logger.disabled = False
 
 if os.environ["pyserssh_systemmessage"] == "YES":
     print(system_banner)

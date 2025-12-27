@@ -78,3 +78,15 @@ def Send_karaoke_effect(client, text, delay=0.1, ln=True):
 
     if ln:
         Send(client, "")  # Send a newline after the entire text is printed
+
+class alternate:
+    ESC = "\033["
+
+    @staticmethod
+    def enter(client): client.send(f"{alternate.ESC}?1049h")
+
+    @staticmethod
+    def exit(client): client.send(f"{alternate.ESC}?1049l")
+
+    @staticmethod
+    def clear(client): client.send(f"{alternate.ESC}2J{alternate.ESC}H")

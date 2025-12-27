@@ -28,13 +28,14 @@ import logging
 import os
 import pickle
 import time
-import atexit
 import threading
 import hashlib
 
-logger = logging.getLogger("PyserSSH.Account")
+from .AMInterface import IAccountManager
 
-class AccountManager:
+logger = logging.getLogger("PyserSSH.LocalAM")
+
+class LocalAccountManager(IAccountManager):
     def __init__(self, allow_guest=False, historylimit=10, autosave=False, autosavedelay=60, autoload=False, autofile="autosave_session.ses"):
         self.accounts = {}
         self.allow_guest = allow_guest
@@ -53,7 +54,6 @@ class AccountManager:
             logger.info("starting autosave")
             self.__autosavethread = threading.Thread(target=self.__autosave, daemon=True)
             self.__autosavethread.start()
-            atexit.register(self.__saveexit)
 
     def __autosave(self):
         self.save(self.__autofile)
@@ -132,7 +132,7 @@ class AccountManager:
         return ">"  # Default prompt if not set for the user
 
     @__auto_save
-    def add_account(self, username, password=None, public_key=None, permissions:list=None, sudo=False):
+    def add_account(self, username, password=None, public_key=None, interactive_auth=False, permissions:list=None, sudo=False):
         if not self.has_user(username):
             allowedlist = []
             accountkey = {}
@@ -148,7 +148,10 @@ class AccountManager:
                 allowedlist.append("publickey")
                 accountkey["public_key"] = public_key
 
-            if password is None and public_key is None:
+            if interactive_auth:
+                allowedlist.append("keyboard-interactive")
+
+            if password is None and public_key is None and not interactive_auth:
                 allowedlist.append("none")
 
             if sudo:
@@ -189,17 +192,14 @@ class AccountManager:
             self.accounts[username]["permissions"] = new_permissions
 
     def save(self, filename="session.ses", keep_log=True):
-        if keep_log:
-            logger.info(f"saving session to {filename}")
+        logger.info(f"saving session to {filename}")
         try:
             with open(filename, 'wb') as file:
                 pickle.dump(self.accounts, file)
 
-            if keep_log:
-                logger.info(f"saved session to {filename}")
+            logger.info(f"saved session to {filename}")
         except Exception as e:
-            if keep_log:
-                logger.error(f"save session failed: {e}")
+            logger.error(f"save session failed: {e}")
 
     def load(self, filename):
         logger.info(f"loading session from {filename}")
@@ -335,3 +335,35 @@ class AccountManager:
             command = self.accounts[username]["lastcommand"]
             return command
         return None  # User or history not found
+
+    @__auto_save
+    def set_env_variable(self, username, variable, value):
+        if self.has_user(username):
+            if "env_variables" not in self.accounts[username]:
+                self.accounts[username]["env_variables"] = {}
+            self.accounts[username]["env_variables"][variable] = value
+
+    @__auto_save
+    def remove_env_variable(self, username, variable):
+        if self.has_user(username):
+            if "env_variables" in self.accounts[username]:
+                if variable in self.accounts[username]["env_variables"]:
+                    del self.accounts[username]["env_variables"][variable]
+
+    def get_env_variable(self, username, variable):
+        if self.has_user(username):
+            if "env_variables" in self.accounts[username]:
+                return self.accounts[username]["env_variables"].get(variable, None)
+        return None
+
+    def get_all_env_variables(self, username):
+        if self.has_user(username):
+            if "env_variables" in self.accounts[username]:
+                return self.accounts[username]["env_variables"]
+        return {}
+
+    def get_root_user(self):
+        for username, account in self.accounts.items():
+            if account.get("sudo", False):
+                return username
+        return None

@@ -46,19 +46,6 @@ def expect(self, client, echo=True):
             chan.sendall(f'\x1b[{cursor_position}D'.encode())  # Move cursor to start of input
         chan.sendall(b'\x1b[K')  # Clear from cursor to end of line
 
-    def redraw_line():
-        """Redraw only the input buffer, not the prompt"""
-        if echo:
-            # Clear the current input area
-            clear_input_area()
-            # Write the buffer content
-            if buffer:
-                chan.sendall(buffer)
-                # Move cursor to correct position
-                chars_after_cursor = len(buffer) - cursor_position
-                if chars_after_cursor > 0:
-                    chan.sendall(f'\x1b[{chars_after_cursor}D'.encode())
-
     def redraw_from_cursor():
         """Redraw from cursor position to end of line"""
         if echo:
@@ -130,8 +117,7 @@ def expect(self, client, echo=True):
                                     if history_index_position == 0:
                                         command = self.accounts.get_lastcommand(client["current_user"])
                                     else:
-                                        command = self.accounts.get_history(client["current_user"],
-                                                                            history_index_position)
+                                        command = self.accounts.get_history(client["current_user"], history_index_position)
 
                                     # Clear current input and update buffer with history command
                                     clear_input_area()
@@ -157,8 +143,7 @@ def expect(self, client, echo=True):
                                             if history_index_position == 0:
                                                 command = self.accounts.get_lastcommand(client["current_user"])
                                             else:
-                                                command = self.accounts.get_history(client["current_user"],
-                                                                                    history_index_position)
+                                                command = self.accounts.get_history(client["current_user"], history_index_position)
 
                                             clear_input_area()
                                             buffer = bytearray(command.encode('utf-8'))

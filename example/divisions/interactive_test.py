@@ -1,5 +1,5 @@
 import time
-from damp11113.format import SRTParser
+from minidamp11113lib import SRTParser
 
 from PyserSSH import wait_input, Send, wait_inputkey, wait_choose, wait_inputmouse, wait_input_old
 from PyserSSH.extensions.XHandler import Division

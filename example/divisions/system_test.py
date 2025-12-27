@@ -1,7 +1,7 @@
 from PyserSSH import Send
 from PyserSSH.extensions.XHandler import Division
 from PyserSSH.system.clientype import Client
-from damp11113.utils import TextFormatter
+from minidamp11113lib import TextFormatter
 
 div = Division("system", "Test command for system", category="Test Function (System)")
 

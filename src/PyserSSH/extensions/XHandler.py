@@ -1,4 +1,6 @@
 """
+XHandler - eXternal Handler
+
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
 Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
@@ -32,6 +34,7 @@ import sys
 from typing import Dict, Optional, Any, List
 
 from ..interactive import Send
+from ..system import sysfunc
 
 logger = logging.getLogger("PyserSSH.Ext.XHandler")
 
@@ -39,20 +42,16 @@ def are_permissions_met(permission_list, permission_require):
     return set(permission_require).issubset(set(permission_list))
 
 class XHandler:
-    def __init__(self, enablehelp=True, showusageonworng=True):
-        """
-       Initializes the command handler with optional settings for help messages and usage.
-
-       Parameters:
-           enablehelp (bool): Whether help messages are enabled.
-           showusageonworng (bool): Whether usage information is shown on wrong usage.
-       """
+    def __init__(self, enablehelp=True, showusageonworng=True, sudo=True, sudo_prefix="!"):
         self.handlers = {}
         self.categories = {}
         self.enablehelp = enablehelp
-        self.showusageonworng = showusageonworng
+        self.showUsageOnWrongFunc = showusageonworng
         self.serverself = None
-        self.commandnotfound = None
+        self.commandNotFoundFunc = None
+        self.preSudoActionFunc = None
+        self.sudo = sudo
+        self.sudo_prefix = sudo_prefix
 
     def command(self, category=None, name=None, aliases=None, permissions: list = None):
         """
@@ -67,6 +66,7 @@ class XHandler:
         Returns:
             function: The wrapped function.
         """
+        logger.debug(f"Registering command: {name} in category: {category} with aliases: {aliases} and permissions: {permissions}")
         def decorator(func):
             nonlocal name, category
             if name is None:
@@ -108,102 +108,121 @@ class XHandler:
                     self.handlers[alias] = func
             return func
 
+        logger.debug(f"Registered command: {name} in category: {category} with aliases: {aliases} and permissions: {permissions}")
+
         return decorator
 
     def call(self, client, command_string):
-        """
-        Processes a command string, validates arguments, and calls the corresponding function.
-
-        Parameters:
-            client (object): The client sending the command.
-            command_string (str): The command string to be executed.
-
-        Returns:
-            Any: The result of the command function, or an error message if invalid.
-        """
         tokens = shlex.split(command_string)
+        if not tokens:
+            return
+
         command_name = tokens[0]
         args = tokens[1:]
-        
+        authorized = True
+        is_sudo = False
+
         if command_name == "help" and self.enablehelp:
             if args:
                 Send(client, self.get_help_command_info(args[0]))
             else:
                 Send(client, self.get_help_message())
                 Send(client, "Type 'help <command>' for more info on a command.")
-        else:
-            if command_name in self.handlers:
-                command_func = self.handlers[command_name]
-                command_info = self.get_command_info(command_name)
-                if command_info and command_info.get('permissions'):
-                    if not are_permissions_met(self.serverself.accounts.get_permissions(client.get_name()), command_info.get('permissions')) or not self.serverself.accounts.is_user_has_sudo(client.get_name()):
+            return
+
+        if self.sudo and command_name.startswith(self.sudo_prefix):
+            is_sudo = True
+            command_name = command_name[len(self.sudo_prefix):]
+
+            if not command_name:
+                Send(client, f"'{self.sudo_prefix}<command>' for command with root.")
+                return
+
+            # Permission check
+            if self.serverself.accounts.is_user_has_sudo(client.get_name()):
+                authorized = True
+            elif self.preSudoActionFunc:
+                authorized = self.preSudoActionFunc(client, command_name)
+            else:
+                authorized = True # if no root account and no pre sudo action function
+
+        if not authorized:
+            return
+
+        # execute command here
+        if command_name in self.handlers:
+            command_func = self.handlers[command_name]
+            command_info = self.get_command_info(command_name)
+            if command_info and command_info.get('permissions'):
+                if not is_sudo:
+                    if not are_permissions_met(self.serverself.accounts.get_permissions(client.get_name()), command_info.get('permissions')):
                         Send(client, f"Permission denied. You do not have permission to execute '{command_name}'.")
                         return
 
-                command_args = inspect.signature(command_func).parameters
-                final_args = {}
-                final_kwargs = {}
-                i = 0
+            command_args = inspect.signature(command_func).parameters
+            final_args = {}
+            final_kwargs = {}
+            i = 0
 
-                while i < len(args):
-                    arg = args[i]
-                    if arg.startswith('-'):
-                        arg_name = arg.lstrip('-')
-                        if arg_name not in command_args:
-                            if self.showusageonworng:
-                                Send(client, self.get_help_command_info(command_name))
-                            Send(client, f"Invalid flag '{arg_name}' for command '{command_name}'.")
-                            return
-                        if command_args[arg_name].annotation == bool:
-                            final_args[arg_name] = True
-                            i += 1
-                        else:
-                            if i + 1 < len(args):
-                                final_args[arg_name] = args[i + 1]
-                                i += 2
-                            else:
-                                if self.showusageonworng:
-                                    Send(client, self.get_help_command_info(command_name))
-                                Send(client, f"Missing value for flag '{arg_name}' for command '{command_name}'.")
-                                return
-                    else:
-                        if command_info['has_args']:
-                            final_args.setdefault('args', []).append(arg)
-                        elif command_info['has_kwargs']:
-                            final_kwargs[arg] = args[i + 1] if i + 1 < len(args) else None
-                            i += 1
-                        else:
-                            if len(final_args) + 1 < len(command_args):
-                                param = list(command_args.values())[len(final_args) + 1]
-                                final_args[param.name] = arg
-                            else:
-                                if self.showusageonworng:
-                                    Send(client, self.get_help_command_info(command_name))
-                                Send(client, f"Unexpected argument '{arg}' for command '{command_name}'.")
-                                return
-                        i += 1
-
-                # Check for required positional arguments
-                for param in list(command_args.values())[1:]:  # Skip client argument
-                    if param.name not in final_args and param.default == inspect.Parameter.empty:
-                        if self.showusageonworng:
+            while i < len(args):
+                arg = args[i]
+                if arg.startswith('-'):
+                    arg_name = arg.lstrip('-')
+                    if arg_name not in command_args:
+                        if self.showUsageOnWrongFunc:
                             Send(client, self.get_help_command_info(command_name))
-                        Send(client, f"Missing required argument '{param.name}' for command '{command_name}'")
+                        Send(client, f"Invalid flag '{arg_name}' for command '{command_name}'.")
                         return
-
-                final_args_list = [final_args.get(param.name, param.default) for param in list(command_args.values())[1:]]
-
-                if command_info['has_kwargs']:
-                    final_args_list.append(final_kwargs)
-
-                return command_func(client, *final_args_list)
-            else:
-                if self.commandnotfound:
-                    self.commandnotfound(client, command_name)
-                    return
+                    if command_args[arg_name].annotation == bool:
+                        final_args[arg_name] = True
+                        i += 1
+                    else:
+                        if i + 1 < len(args):
+                            final_args[arg_name] = args[i + 1]
+                            i += 2
+                        else:
+                            if self.showUsageOnWrongFunc:
+                                Send(client, self.get_help_command_info(command_name))
+                            Send(client, f"Missing value for flag '{arg_name}' for command '{command_name}'.")
+                            return
                 else:
-                    Send(client, f"{command_name} not found")
+                    if command_info['has_args']:
+                        final_args.setdefault('args', []).append(arg)
+                    elif command_info['has_kwargs']:
+                        final_kwargs[arg] = args[i + 1] if i + 1 < len(args) else None
+                        i += 1
+                    else:
+                        if len(final_args) + 1 < len(command_args):
+                            param = list(command_args.values())[len(final_args) + 1]
+                            final_args[param.name] = arg
+                        else:
+                            if self.showUsageOnWrongFunc:
+                                Send(client, self.get_help_command_info(command_name))
+                            Send(client, f"Unexpected argument '{arg}' for command '{command_name}'.")
+                            return
+                    i += 1
+
+            # Check for required positional arguments
+            for param in list(command_args.values())[1:]:  # Skip client argument
+                if param.name not in final_args and param.default == inspect.Parameter.empty:
+                    if self.showUsageOnWrongFunc:
+                        Send(client, self.get_help_command_info(command_name))
+                    Send(client, f"Missing required argument '{param.name}' for command '{command_name}'")
                     return
+
+            final_args_list = [final_args.get(param.name, param.default) for param in list(command_args.values())[1:]]
+
+            if command_info['has_kwargs']:
+                final_args_list.append(final_kwargs)
+
+            return command_func(client, *final_args_list)
+        else:
+            if self.commandNotFoundFunc:
+                self.commandNotFoundFunc(client, command_name)
+                return
+            else:
+                Send(client, f"{command_name} not found")
+                return
 
     def get_command_info(self, command_name):
         """
@@ -241,14 +260,14 @@ class XHandler:
 
     def get_help_command_info(self, command):
         """
-       Generates a detailed help message for a specific command.
+        Generates a detailed help message for a specific command.
 
-       Parameters:
+        Parameters:
            command (str): The name of the command.
 
-       Returns:
+        Returns:
            str: The formatted help message for the command.
-       """
+        """
         command_info = self.get_command_info(command)
         aliases = command_info.get('aliases', [])
         help_message = f"{command_info['name']}"
@@ -334,7 +353,7 @@ class Division:
             aliases (list): Command aliases
             permissions (list): Additional permissions for this specific command
         """
-
+        logger.debug(f"Registering command '{name}' in division '{self.name}' with aliases {aliases} and permissions {permissions}")
         def decorator(func):
             nonlocal name
             if name is None:
@@ -361,6 +380,8 @@ class Division:
                 self._register_command_to_handler(command_info)
 
             return func
+
+        logger.debug(f"Registered command '{name}' in division '{self.name}' with aliases {aliases} and permissions {permissions}")
 
         return decorator
 
@@ -436,12 +457,16 @@ class DivisionHandler:
         if division.name in self.divisions:
             return False
 
+        logger.info(f"Registering division: {division.name}")
+
         self.divisions[division.name] = division
         division.handler = self.xhandler
 
         # Register all commands if division is enabled
         if division.enabled:
             self._register_division_commands(division)
+
+        logger.info(f"Registered division: {division.name} with {len(division.commands)} commands")
 
         return True
 
@@ -457,6 +482,8 @@ class DivisionHandler:
             bool: True if successful, False otherwise
         """
         try:
+            logger.info(f"Loading division from module: {module_path}")
+
             package_path = ".".join(module_path.split(".")[:-1])
             # Import or reload the module
             if package_path in sys.modules:
@@ -464,7 +491,7 @@ class DivisionHandler:
             else:
                 module = importlib.import_module(package_path)
 
-            self.module_cache[package_path] = module
+            self.module_cache[package_path] = [module, module_path.split(".")[-1]]
 
             # Look for a division instance or setup function
             division = getattr(module, module_path.split(".")[-1])
@@ -473,7 +500,6 @@ class DivisionHandler:
                 if division_name:
                     division.name = division_name
                 return self.register_division(division)
-
         except Exception as e:
             logger.error(f"Failed to load division from {module_path}: {e}")
 
@@ -492,9 +518,13 @@ class DivisionHandler:
         if division_name not in self.divisions:
             return False
 
+        logger.info(f"Unregistering division: {division_name}")
+
         division = self.divisions[division_name]
         self._unregister_division_commands(division)
         del self.divisions[division_name]
+
+        logger.info(f"Unregistered division: {division_name}")
 
         return True
 
@@ -544,7 +574,6 @@ class DivisionHandler:
 
         Parameters:
             division_name (str): Name of the division to reload
-            module_path (str): Module path (if different from original)
 
         Returns:
             bool: True if successful, False otherwise
@@ -552,22 +581,26 @@ class DivisionHandler:
         if division_name not in self.divisions:
             return False
 
+        logger.info(f"Reloading division: {division_name}")
+
         # Find the module path
+        varname = "div"
         if not module_path:
             # Try to find it in cache
             for path, module in self.module_cache.items():
-                if hasattr(module, 'division') and module.division.name == division_name:
+                if hasattr(module[0], module[1]) and getattr(module[0], module[1]).name == division_name:
                     module_path = path
+                    varname = module[1]
                     break
 
-        if not module_path:
+        if not module_path and not varname:
             return False
 
         # Unregister current division
         self.unregister_division(division_name)
 
         # Register from module again
-        return self.register_division_from_module(module_path, division_name)
+        return self.register_division_from_module(module_path+"."+varname, division_name)
 
     def get_division_info(self, division_name: str) -> Optional[Dict]:
         """

@@ -27,9 +27,12 @@ SOFTWARE.
 import time
 import paramiko
 import ast
+import threading
 
 from .syscom import systemcommand
 from .RemoteStatus import startremotestatus
+from .KeyInteract import InteractiveAuthManager
+
 
 def parse_exec_request(command_string):
     try:
@@ -101,8 +104,11 @@ def parse_exec_request_kwargs(command_string):
         return {}
 
 class Sinterface(paramiko.ServerInterface):
-    def __init__(self, serverself):
+    def __init__(self, serverself, addr):
         self.serverself = serverself
+        self.addr = addr
+
+        self.IAM = None
 
     def check_channel_request(self, kind, channel_id):
         if kind == 'session':
@@ -116,7 +122,8 @@ class Sinterface(paramiko.ServerInterface):
         data = {
             "username": username,
             "password": password,
-            "auth_type": "password"
+            "auth_type": "password",
+            "addr": self.addr
         }
 
         if self.serverself.accounts.validate_credentials(username, password) and not self.serverself.usexternalauth:
@@ -130,7 +137,8 @@ class Sinterface(paramiko.ServerInterface):
     def check_auth_none(self, username):
         data = {
             "username": username,
-            "auth_type": "none"
+            "auth_type": "none",
+            "addr": self.addr
         }
 
         if self.serverself.accounts.validate_credentials(username) and not self.serverself.usexternalauth:
@@ -145,7 +153,8 @@ class Sinterface(paramiko.ServerInterface):
         data = {
             "username": username,
             "public_key": key,
-            "auth_type": "key"
+            "auth_type": "key",
+            "addr": self.addr
         }
 
         if self.serverself.accounts.validate_credentials(username, public_key=key) and not self.serverself.usexternalauth:
@@ -170,7 +179,7 @@ class Sinterface(paramiko.ServerInterface):
         if b"##Moba##" in execommand and self.serverself.enaremostatus:
             startremotestatus(self.serverself, channel)
 
-        client = self.serverself.client_handlers[channel.getpeername()]
+        client = self.serverself.client_handlers[self.addr]
 
         if self.serverself.enasysexec:
             precommand, env, user = parse_exec_request(execommand)
@@ -185,7 +194,7 @@ class Sinterface(paramiko.ServerInterface):
                 client.isexeccommandrunning = True
                 try:
                     if self.serverself.enasyscom:
-                        sct = systemcommand(client, precommand)
+                        sct = systemcommand(client, precommand, self.serverself)
                     else:
                         sct = False
 
@@ -207,17 +216,16 @@ class Sinterface(paramiko.ServerInterface):
 
             self.serverself._handle_event("exec", client, **kwargs)
 
-
         return True
 
     def check_channel_pty_request(self, channel, term, width, height, pixelwidth, pixelheight, modes):
         data = {
-            "term": term,
+            "term": str(term),
             "width": width,
             "height": height,
             "pixelwidth": pixelwidth,
             "pixelheight": pixelheight,
-            "modes": modes
+            "modes": str(modes)
         }
         data2 = {
             "width": width,
@@ -227,9 +235,9 @@ class Sinterface(paramiko.ServerInterface):
         }
         try:
             time.sleep(0.01) # fix waiting windowsize
-            self.serverself.client_handlers[channel.getpeername()]["windowsize"] = data2
-            self.serverself.client_handlers[channel.getpeername()]["terminal_type"] = term
-            self.serverself._handle_event("connectpty", self.serverself.client_handlers[channel.getpeername()], data)
+            self.serverself.client_handlers[self.addr]["windowsize"] = data2
+            self.serverself.client_handlers[self.addr]["terminal_type"] = term
+            self.serverself._handle_event("connectpty", self.serverself.client_handlers[self.addr], data)
         except:
             pass
 
@@ -246,8 +254,8 @@ class Sinterface(paramiko.ServerInterface):
             "screen_number": screen_number
         }
         try:
-            self.serverself.client_handlers[channel.getpeername()]["x11"] = data
-            self.serverself._handle_event("connectx11", self.serverself.client_handlers[channel.getpeername()], data)
+            self.serverself.client_handlers[self.addr]["x11"] = data
+            self.serverself._handle_event("connectx11", self.serverself.client_handlers[self.addr], data)
         except:
             pass
 
@@ -260,5 +268,48 @@ class Sinterface(paramiko.ServerInterface):
             "pixelwidth": pixelwidth,
             "pixelheight": pixelheight
         }
-        self.serverself.client_handlers[channel.getpeername()]["windowsize"] = data
-        self.serverself._handle_event("resized", self.serverself.client_handlers[channel.getpeername()], data)
+        self.serverself.client_handlers[self.addr]["windowsize"] = data
+        self.serverself._handle_event("resized", self.serverself.client_handlers[self.addr], data)
+
+    def check_channel_forward_agent_request(self, channel):
+        print(channel)
+        return True
+
+    def check_port_forward_request(self, address, port):
+        print(address, port)
+        return True
+
+    def cancel_port_forward_request(self, address, port):
+        print(address, port)
+        return True
+
+    def check_channel_direct_tcpip_request(self, chanid, origin, destination):
+        print(chanid)
+        print(f"Port forward request: {origin} -> {destination}")
+        return True
+
+    def check_channel_env_request(self, channel, name, value):
+        client = self.serverself.client_handlers[self.addr]
+        client.env_variables[name] = value
+
+    def check_auth_interactive(self, username, submethods):
+        self.IAM = InteractiveAuthManager("Interactive Auth", "Please enter prompt")
+
+        threading.Thread(target=self.serverself._handle_event, args=("auth_interactive", username, self.IAM), daemon=True).start()
+
+        self.IAM.wait_for_system()
+
+        return self.IAM.generateIQ()
+
+    def check_auth_interactive_response(self, responses):
+        assert self.IAM is not None, "InteractiveAuthManager should initialized before."
+
+        self.IAM.set_response(responses)
+
+        self.IAM.wait_for_result()
+
+        return self.IAM.result
+
+
+    def check_global_request(self, kind, msg):
+        print(f"Global request received: {kind}")

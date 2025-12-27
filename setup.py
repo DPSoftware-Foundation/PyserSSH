@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyserSSH',
-    version='5.3',
+    version='6.0',
     license='MIT',
     author='DPSoftware Foundation',
     author_email='contact@damp11113.xyz',
@@ -29,7 +29,8 @@ setup(
     ],
     install_requires=[
         "paramiko",
-        "psutil"
+        "psutil",
+        "pymongo"
     ],
     extras_require={
         'RemoDesk': [
@@ -40,5 +41,10 @@ setup(
             "numpy",
             "opencv-python"
         ],
+        'ext_pyofetch': [
+            "py-cpuinfo",
+            "GPUtil",
+            "distro"
+        ]
     }
 )

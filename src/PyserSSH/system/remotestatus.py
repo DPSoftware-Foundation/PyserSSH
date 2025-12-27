@@ -99,11 +99,14 @@ def get_folder_usage(folder_path, limit_size):
     percent_used = (folder_size / limit_size) * 100 if limit_size > 0 else 0
     return used_size, free_size, limit_size, percent_used
 
-librarypath = os.path.abspath(__file__).replace("\\", "/").split("/system/remotestatus.py")[0]
+librarypath = os.path.abspath(__file__).replace("\\", "/").split("/system/RemoteStatus.py")[0]
+
+def to_centiseconds(seconds):
+    return int(seconds * 100)
 
 def remotestatus(serverself, channel, oneloop=False):
     try:
-        while True:
+        while serverself.isrunning:
             # Get RAM information
             mem = psutil.virtual_memory()
 
@@ -120,22 +123,29 @@ Inactive:        0 kB"""
 
             cpu_data = []
 
-            #currentprocess = psutil.Process().cpu_times()
+            # Get CPU times
+            cpu_times = psutil.cpu_times()
 
-            #cpu_data.append(["cpu", int(currentprocess.user), 0, int(currentprocess.system), 0, 0, 0, 0])
+            # Overall CPU line
+            user = to_centiseconds(cpu_times.user)
+            system = to_centiseconds(cpu_times.system)
+            idle = to_centiseconds(cpu_times.idle)
+            irq = to_centiseconds(getattr(cpu_times, 'interrupt', 0))
+            softirq = to_centiseconds(getattr(cpu_times, 'dpc', 0))
 
-            #if platform.system() == "Linux":
-            io_counters = psutil.disk_io_counters(perdisk=False)
-            io_wait_time = io_counters.read_time + io_counters.write_time
-            for idx, cpu_time in enumerate(psutil.cpu_times(True), start=-1):
-                if idx == -1:
-                    cpu_data.append(["cpu", int(cpu_time.user), 0, int(cpu_time.system), int(cpu_time.idle), io_wait_time, int(cpu_time.interrupt), 0, 0, 0, 0])
-                else:
-                    cpu_data.append(
-                        [f"cpu{idx}", int(cpu_time.user), 0, int(cpu_time.system), int(cpu_time.idle), io_wait_time, int(cpu_time.interrupt), 0, 0, 0, 0])
+            cpu_data.append(f"cpu {user} 0 {system} {idle} 0 {irq} {softirq} 0 0 0")
 
-            # Calculate maximum widths for formatting (optional)
-            max_widths = [max(len(str(row[i])) for row in cpu_data) for i in range(len(cpu_data[0]))]
+            # Per-CPU lines
+            per_cpu_times = psutil.cpu_times(percpu=True)
+            for i, cpu_time in enumerate(per_cpu_times):
+                user = to_centiseconds(cpu_time.user)
+                system = to_centiseconds(cpu_time.system)
+                idle = to_centiseconds(cpu_time.idle)
+                irq = to_centiseconds(getattr(cpu_time, 'interrupt', 0))
+                softirq = to_centiseconds(getattr(cpu_time, 'dpc', 0))
+
+                cpu_data.append(
+                    f"cpu{i} {user} 0 {system} {idle} 0 {irq} {softirq} 0 0 0")
 
             disk_data = [
                 ["Filesystem", "1K-blocks", "Used", "Available", "Use%", "Mounted on"],
@@ -208,17 +218,19 @@ Inactive:        0 kB"""
 
             for idx, client in enumerate(serverself.client_handlers.values()):
                 last_login_date = datetime.utcfromtimestamp(client.last_login_time).strftime('%Y-%m-%d %H:%M')
-                who_data.append([client.current_user, f"pty/{idx}", last_login_date, f"({client.peername[0]})"])
+                if client.session_type == "tty":
+                    who_data.append([client.current_user, f"{client.session_type}", last_login_date, ""])
+                else:
+                    who_data.append([client.current_user, f"{client.session_type}/{idx}", last_login_date, f"({client.peername[0]})"])
 
             max_widths5 = [max(len(str(row[i])) for row in who_data) for i in range(len(who_data[0]))]
 
             Send(channel, ramoutput, directchannel=True)
             Send(channel, "", directchannel=True)
-
             # only support for CPU status current python process
             Send(channel, "==> /proc/stat <==", directchannel=True)
-            for row in cpu_data:
-                Send(channel, " ".join("{:<{width}}".format(item, width=max_widths[i]) for i, item in enumerate(row)), directchannel=True)
+
+            Send(channel, "\n".join(cpu_data), directchannel=True)
 
             Send(channel, "", directchannel=True)
             Send(channel, "==> /proc/version <==", directchannel=True)
@@ -230,7 +242,7 @@ Inactive:        0 kB"""
 
             Send(channel, "", directchannel=True)
             Send(channel, "==> /proc/sys/kernel/hostname <==", directchannel=True)
-            Send(channel, platform.node(), directchannel=True)
+            Send(channel, serverself.hostname, directchannel=True)
 
             # fixing later for network status
             #Send(channel, "", directchannel=True)

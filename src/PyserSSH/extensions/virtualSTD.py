@@ -1,4 +1,6 @@
 """
+VirtualSTD - Virtual Standard IO
+
 PyserSSH - A Scriptable SSH server. For more info visit https://github.com/DPSoftware-Foundation/PyserSSH
 Copyright (C) 2023-present DPSoftware Foundation (MIT)
 
@@ -319,7 +321,7 @@ class VStdout:
 class VStderr:
     """Custom stderr implementation"""
 
-    def __init__(self, client: Client = None, forward_to_original: bool = False):
+    def __init__(self, client: Client = None, forward_to_original: bool = False, use_red_text: bool = False):
         self._client = client
         self._buffer = io.StringIO()
         self._forward_to_original = forward_to_original
@@ -329,6 +331,7 @@ class VStderr:
         self.newlines = None
         self.closed = False
         self._output_history = []
+        self.use_red_text = use_red_text
 
     def write(self, text: str) -> int:
         """Write string to stream and return number of characters written"""
@@ -344,7 +347,11 @@ class VStderr:
         # Notify client
         try:
             # add color red for stderr output
-            self._client.send(f"\033[31m{text_str}\033[0m")
+            if self.use_red_text:
+                self._client.send(f"\033[31m{text_str}\033[0m")
+            else:
+                self._client.send(text_str)
+
         except (AttributeError, NotImplementedError):
             pass
 
@@ -404,7 +411,8 @@ class StreamSTD:
                  client: Client = None,
                  stdin_data: str = "",
                  forward_stdout: bool = False,
-                 forward_stderr: bool = False):
+                 forward_stderr: bool = False,
+                 stderr_red_text: bool = True):
         self.client = client
         self._original_stdin = sys.stdin
         self._original_stdout = sys.stdout
@@ -413,7 +421,7 @@ class StreamSTD:
         # Create the stream objects
         self.stdin = VStdin(client, stdin_data)
         self.stdout = VStdout(client, forward_stdout)
-        self.stderr = VStderr(client, forward_stderr)
+        self.stderr = VStderr(client, forward_stderr, stderr_red_text)
 
         self._is_active = False
 

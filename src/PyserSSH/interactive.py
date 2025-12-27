@@ -383,7 +383,7 @@ def wait_inputmouse(client, timeout=0):
         Send(client, "\033[?1000l", ln=False)
         raise
 
-def wait_choose(client, choose, prompt="", timeout=0):
+def wait_choose(client, choose, prompt="", timeout=0, selectchar=("[", "]")):
     channel = client["channel"]
 
     chooseindex = 0
@@ -396,7 +396,7 @@ def wait_choose(client, choose, prompt="", timeout=0):
         try:
             tempchooselist = choose.copy()
 
-            tempchooselist[chooseindex] = "[" + tempchooselist[chooseindex] + "]"
+            tempchooselist[chooseindex] = selectchar[0] + tempchooselist[chooseindex] + selectchar[1]
 
             exported = " ".join(tempchooselist)
 

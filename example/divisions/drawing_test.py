@@ -1,49 +1,31 @@
-import cv2
 import numpy as np
 
-from PyserSSH import Clear, Send, wait_inputkey
+from PyserSSH import Clear, Send
 from PyserSSH.extensions.XHandler import Division
 from PyserSSH.system.clientype import Client
-from damp11113.file import sort_files, allfiles
-from damp11113.utils import TextFormatter
+from PyserSSH.extensions.keyInterrupter import attachInterrupt
+
+# noinspection PyUnresolvedReferences
+from minidamp11113lib import sort_files, allfiles, TextFormatter
 
 div = Division("drawing", "Command for drawing", category="Drawing")
 
 @div.command(name="renimtest")
-def xh_renimtest(client: Client, path: str):
+def xh_renimtest(client: Client, render_library="cv2", chafa_rendertype="sixel"):
+    """
+render_library: cv2, chafa
+chafa_rendertype: sixel, kitty, symbols
+    """
+
     Clear(client)
-    image = cv2.imread("opensource.png", cv2.IMREAD_COLOR)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image_path = f"opensource.png"
 
-    width, height = client['windowsize']["width"] - 5, client['windowsize']["height"] - 5
+    width, height = client['windowsize']["width"] - 1, client['windowsize']["height"] - 1
 
-    # resize image
-    resized = cv2.resize(image, (width, height))
-    t = ""
-
-    # Scan all pixels
-    for y in range(0, height):
-        for x in range(0, width):
-            pixel_color = resized[y, x]
-            if pixel_color.tolist() != [0, 0, 0]:
-                t += TextFormatter.format_text_truecolor(" ",
-                                                            background=f"{pixel_color[0]};{pixel_color[1]};{pixel_color[2]}")
-            else:
-                t += " "
-
-        Send(client, t, ln=False)
-        Send(client, "")
-        t = ""
-
-@div.command(name="badapple")
-def xh_badapple(client: Client):
-    badapplefile = sort_files(allfiles('badappleframe'))
-    for i in badapplefile:
-        Clear(client)
-        image = cv2.imread(f".../badappleframe/{i}", cv2.IMREAD_COLOR)
+    if render_library == "cv2":
+        import cv2
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        width, height = client['windowsize']["width"] - 5, client['windowsize']["height"] - 5
 
         # resize image
         resized = cv2.resize(image, (width, height))
@@ -53,12 +35,45 @@ def xh_badapple(client: Client):
         for y in range(0, height):
             for x in range(0, width):
                 pixel_color = resized[y, x]
-                t += TextFormatter.format_text_truecolor(" ", background=f"{pixel_color[0]};{pixel_color[1]};{pixel_color[2]}")
+                if pixel_color.tolist() != [0, 0, 0]:
+                    t += TextFormatter.format_text_truecolor(" ",
+                                                                background=f"{pixel_color[0]};{pixel_color[1]};{pixel_color[2]}")
+                else:
+                    t += " "
 
             Send(client, t, ln=False)
             Send(client, "")
             t = ""
+    elif render_library == "chafa":
+        import chafa
+        from chafa.loader import Loader
 
+        image = Loader(image_path)
+
+        config = chafa.CanvasConfig()
+        if chafa_rendertype == "sixel":
+            config.pixel_mode = chafa.PixelMode.CHAFA_PIXEL_MODE_SIXELS
+        elif chafa_rendertype == "kitty":
+            config.pixel_mode = chafa.PixelMode.CHAFA_PIXEL_MODE_KITTY
+        else:
+            config.pixel_mode = chafa.PixelMode.CHAFA_PIXEL_MODE_SYMBOLS
+
+        # Fit to terminal
+        config.width = width
+        config.height = height
+
+
+        canvas = chafa.Canvas(config)
+
+        canvas.draw_all_pixels(
+            image.pixel_type,
+            image.get_pixels(),
+            image.width, image.height,
+            image.rowstride
+        )
+
+        for line in canvas.print_rows():
+            client.sendln(line.decode())
 
 R1 = 1
 R2 = 2
@@ -110,8 +125,17 @@ def render_frame(A: float, B: float, screen_size) -> np.ndarray:
 
     return output
 
-@div.command()
-def donut(client, screen_size=40):
+@div.command(name="donut")
+def xh_donut(client, screen_size=40):
+    isStop = False
+
+    def interrupted():
+        nonlocal isStop
+
+        isStop = True
+
+    attachInterrupt(client, interrupted)
+
     screen_size = int(screen_size)
 
     A = 1
@@ -126,4 +150,4 @@ def donut(client, screen_size=40):
             Send(client, " ".join(row))
             Send(client, "\n")
 
-        if wait_inputkey(client, raw=True, timeout=0.01) == "\x03": break
+        if isStop: break

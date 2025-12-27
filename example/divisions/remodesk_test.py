@@ -5,5 +5,6 @@ div = Division("remodesk", "Command for RemoDesk extension module", category="Re
 remotedesktopserver = RemoDesk()
 
 @div.command(name="startremotedesktop", permissions=["remote_desktop"])
-def remotedesktop(client):
+def xh_remotedesktop(client):
     remotedesktopserver.handle_new_client(client)
+

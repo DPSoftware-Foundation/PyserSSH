@@ -51,6 +51,9 @@ class SSHSFTPServer(paramiko.SFTPServerInterface):
         self.account = args[1]
         self.clientH = args[2]
 
+    def session_started(self):
+        self.clientH[self.channel.getpeername()]["connecttype"] = "SFTP"
+
     def _realpath(self, path):
         root = self.account.get_user_sftp_root_path(self.clientH[self.channel.getpeername()]["current_user"])
         return root + self.canonicalize(path)

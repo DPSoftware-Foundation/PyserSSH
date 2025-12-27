@@ -53,7 +53,10 @@ class Protocol:
     def _handle_client(self):
         try:
             while self.running:
+
                 data2send = self.buffer.get()
+
+
                 data = data2send[1]
                 clientID = data2send[0]
 

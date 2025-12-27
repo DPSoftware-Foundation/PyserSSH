@@ -26,10 +26,11 @@ SOFTWARE.
 """
 
 from ..interactive import Clear, Send, wait_inputkey
+from .moredisplay import alternate
 
 import re
 from abc import ABC, abstractmethod
-from typing import Optional, List, Union, Callable
+from typing import Optional, List
 
 
 class Widget(ABC):
@@ -379,6 +380,8 @@ class Dialog:
         self.running = False
         self.result = None
 
+        self.is_init = False
+
     def show(self) -> any:
         """Show the dialog and return the result"""
         self.running = True
@@ -391,7 +394,13 @@ class Dialog:
 
     def _render(self):
         """Render the dialog"""
-        Clear(self.client)
+        if not self.is_init:
+            alternate.enter(self.client)
+
+            self.is_init = True
+        else:
+            alternate.clear(self.client)
+
         content_lines = self.window.render(self.client)
 
         for line in content_lines:
@@ -463,7 +472,7 @@ class Dialog:
         """Close the dialog with optional result"""
         self.running = False
         self.result = result
-        Clear(self.client)
+        alternate.exit(self.client)
 
 
 # Convenience functions for common dialog types
