@@ -5,4 +5,4 @@ and install
 
 pip install PyserSSH[ext_pyofetch]
 pip install PyserSSH[RemoDesk]
-pip install beautifulsoup4 natsort asciichartpy markdownify
+pip install beautifulsoup4 natsort asciichartpy markdownify chafa.py
