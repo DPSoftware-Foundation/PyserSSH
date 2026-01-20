@@ -2,7 +2,7 @@
 
 ![Screenshot 2025-07-06 160010](https://github.com/user-attachments/assets/e530eeca-3331-4dec-beb8-7fc851ffdc4e)
 
-This library will be **Pyserminal** (Python Server Terminal) as it supports multiple protocols such as ssh telnet rlogin and mores...
+This library will be **Pyserminal** (Python Server Terminal) as it supports multiple protocols such as ssh telnet rlogin and mores... in future.
 
 PyserSSH is a free and open-source Python library designed to facilitate the creation of customizable SSH terminal servers. Initially developed for research purposes to address the lack of suitable SSH server libraries in Python, PyserSSH provides a flexible and user-friendly solution for implementing SSH servers, making it easier for developers to handle user interactions and command processing.
 
