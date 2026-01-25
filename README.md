@@ -60,3 +60,13 @@ https://github.com/damp11113/PyserSSH/assets/64675096/49bef3e2-3b15-4b64-b88e-3c
 I intend to leaked private key because that key i generated new. I recommend to generate new key if you want to use on your host because that key is for demo only.
 why i talk about this? because when i push private key into this repo in next 5 min++ i getting new email from GitGuardian. in that email say "
 GitGuardian has detected the following RSA Private Key exposed within your GitHub account" i dont knows what is GitGuardian and i not install this app into my account.
+
+# Feedback & Issues
+
+This project is actively developed by a solo developer.
+
+- Questions are welcome
+- Bug reports are welcome
+- Even unclear behavior or confusion counts as an issue
+
+If something feels hard to use, that's valuable feedback.
